@@ -296,44 +296,35 @@
 
     <script>
         /* ==========================================
-           【データ＆オーディオ管理機構 (旧audio.js分)】
+           【オーディオ＆データ管理】
            ========================================== */
         window.GameAudio = {
             player: null,
             isReady: false,
             isRecording: false,
-            notesData: [], // 譜面データ配列
+            notesData: [],
 
             init() {
-                // YouTube URLの読み込みボタンイベント
                 const btnLoad = document.getElementById('btn-load');
                 if (btnLoad) {
                     btnLoad.addEventListener('click', () => {
                         const urlInput = document.getElementById('youtube-url').value;
                         const videoId = this.extractVideoId(urlInput);
-                        if (videoId) {
-                            this.loadVideo(videoId);
-                        } else {
-                            alert('有効なYouTubeのURLまたは動画IDを入力してください。');
-                        }
+                        if (videoId) this.loadVideo(videoId);
+                        else alert('有効なURLまたは動画IDを入力してください。');
                     });
                 }
 
-                // JSONセーブ・ロード機能
                 const btnSaveJson = document.getElementById('btn-save-json');
-                if (btnSaveJson) {
-                    btnSaveJson.addEventListener('click', () => this.saveNotesAsJson());
-                }
+                if (btnSaveJson) btnSaveJson.addEventListener('click', () => this.saveNotesAsJson());
 
                 const fileLoadJson = document.getElementById('file-load-json');
-                if (fileLoadJson) {
-                    fileLoadJson.addEventListener('change', (e) => this.loadNotesFromJson(e));
-                }
+                if (fileLoadJson) fileLoadJson.addEventListener('change', (e) => this.loadNotesFromJson(e));
             },
 
             extractVideoId(url) {
                 if (!url) return null;
-                if (url.length === 11) return url; // 直接IDが入力された場合
+                if (url.length === 11) return url;
                 const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
                 const match = url.match(regExp);
                 return (match && match[2].length === 11) ? match[2] : null;
@@ -343,25 +334,15 @@
                 if (this.player && typeof this.player.loadVideoById === 'function') {
                     this.player.loadVideoById(videoId);
                 } else {
-                    // プレイヤーがまだ生成されていない場合は新規作成
                     this.player = new YT.Player('youtube-player', {
                         videoId: videoId,
-                        playerVars: {
-                            'autoplay': 0,
-                            'controls': 1,
-                            'disablekb': 1,
-                            'fs': 0,
-                            'rel': 0,
-                            'showinfo': 0
-                        },
+                        playerVars: { 'autoplay': 0, 'controls': 1, 'disablekb': 1, 'fs': 0, 'rel': 0, 'showinfo': 0 },
                         events: {
                             'onReady': () => { this.isReady = true; },
                             'onStateChange': (e) => {
-                                // 再生開始時にプレイモードならゲーム側のリセットをかける
-                                if (e.data === YT.PlayerState.PLAYING && window.GameCore.currentMode === 'play') {
-                                    if (window.GameCore.isResultShown) {
-                                        window.GameCore.resetLive();
-                                    }
+                                // 動画が再生されたらノーツの判定状態を同期リセットする
+                                if (e.data === YT.PlayerState.PLAYING && window.GameCore && window.GameCore.currentMode === 'play') {
+                                    window.GameCore.resetLive();
                                 }
                             }
                         }
@@ -376,27 +357,16 @@
                 return 0;
             },
 
-            play() {
-                if (this.player && typeof this.player.playVideo === 'function') this.player.playVideo();
-            },
-
-            pause() {
-                if (this.player && typeof this.player.pauseVideo === 'function') this.player.pauseVideo();
-            },
+            play() { if (this.player && typeof this.player.playVideo === 'function') this.player.playVideo(); },
+            pause() { if (this.player && typeof this.player.pauseVideo === 'function') this.player.pauseVideo(); },
 
             saveNotesAsJson() {
-                if (this.notesData.length === 0) {
-                    alert('保存するノーツデータがありません。');
-                    return;
-                }
+                if (this.notesData.length === 0) return alert('保存するノーツデータがありません。');
                 const cleanData = this.notesData.map(n => ({ time: n.time, lane: n.lane, type: n.type }));
                 const blob = new Blob([JSON.stringify(cleanData, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url;
-                a.download = 'chart.json';
-                a.click();
-                URL.revokeObjectURL(url);
+                a.href = url; a.download = 'chart.json'; a.click(); URL.revokeObjectURL(url);
             },
 
             loadNotesFromJson(e) {
@@ -415,44 +385,35 @@
                         }));
                         this.notesData.sort((a, b) => a.time - b.time);
                         alert(`譜面データを読み込みました (${this.notesData.length} ノーツ)`);
-                        if (window.GameVisuals) window.GameVisuals.updateTimeline();
+                        
+                        // ロード直後にゲームコアの状態とエディタを安全に初期化
                         if (window.GameCore) window.GameCore.resetLive();
+                        if (window.GameVisuals) window.GameVisuals.updateTimeline();
                     } catch (err) {
-                        alert('JSONファイルの読み込みに失敗しました。形式を確認してください。');
+                        alert('JSONファイルの読み込みに失敗しました。');
                     }
                 };
                 reader.readAsText(file);
+                e.target.value = ''; // 連続読込対応
             }
         };
 
-        // YouTube Iframe API が読み込まれた際に自動で呼ばれる関数
         function onYouTubeIframeAPIReady() {
             window.GameAudio.init();
         }
 
         /* ==========================================
-           【ゲームメインロジック (GameCore)】
+           【ゲームコアロジック】
            ========================================== */
         if (typeof window.GameCore === 'undefined') {
             window.GameCore = {
                 currentMode: 'play', 
-                score: 0,
-                combo: 0,
-                maxCombo: 0,
+                score: 0, combo: 0, maxCombo: 0,
                 noteSpeedMs: 1000, 
-                
-                judgments: {
-                    perfect: 40,
-                    great: 80,
-                    good: 130,
-                    miss: 200
-                },
-
+                judgments: { perfect: 40, great: 80, good: 130, miss: 200 },
                 keyMap: { 'd': 0, 'f': 1, 'j': 2, 'k': 3 },
-                
                 pressTimestamps: { 0: null, 1: null, 2: null, 3: null }, 
                 isKeyHolding: { 0: false, 1: false, 2: false, 3: false }, 
-
                 isBgVisible: true, 
                 counts: { perfect: 0, great: 0, good: 0, miss: 0 },
                 isResultShown: false,
@@ -463,43 +424,28 @@
                 },
 
                 setupEventListeners() {
-                    const btnPlay = document.getElementById('btn-mode-play');
-                    const btnRecord = document.getElementById('btn-mode-record');
-                    const btnEdit = document.getElementById('btn-mode-edit');
-                    const btnToggleBg = document.getElementById('btn-toggle-bg');
-
-                    if (btnPlay) btnPlay.addEventListener('click', () => this.switchMode('play'));
-                    if (btnRecord) btnRecord.addEventListener('click', () => this.switchMode('record'));
-                    if (btnEdit) btnEdit.addEventListener('click', () => this.switchMode('edit'));
-                    if (btnToggleBg) btnToggleBg.addEventListener('click', () => this.toggleBackground());
+                    document.getElementById('btn-mode-play').addEventListener('click', () => this.switchMode('play'));
+                    document.getElementById('btn-mode-record').addEventListener('click', () => this.switchMode('record'));
+                    document.getElementById('btn-mode-edit').addEventListener('click', () => this.switchMode('edit'));
+                    document.getElementById('btn-toggle-bg').addEventListener('click', () => this.toggleBackground());
 
                     window.addEventListener('keydown', (e) => {
-                        if (e.repeat) return; // 長押し自動連打ガード
+                        if (e.repeat) return;
                         const key = e.key.toLowerCase();
-                        if (e.key === ' ') {
-                            e.preventDefault();
-                            this.togglePlayback();
-                            return;
-                        }
+                        if (e.key === ' ') { e.preventDefault(); this.togglePlayback(); return; }
                         if (this.isBgVisible && this.keyMap.hasOwnProperty(key)) {
                             const lane = this.keyMap[key];
-                            if (!this.isKeyHolding[lane]) {
-                                this.isKeyHolding[lane] = true;
-                                this.handlePressStart(lane);
-                            }
+                            if (!this.isKeyHolding[lane]) { this.isKeyHolding[lane] = true; this.handlePressStart(lane); }
                         }
                     });
 
                     window.addEventListener('keyup', (e) => {
                         const key = e.key.toLowerCase();
                         if (this.isBgVisible && this.keyMap.hasOwnProperty(key)) {
-                            const lane = this.keyMap[key];
-                            this.isKeyHolding[lane] = false;
-                            this.handlePressEnd(lane);
+                            const lane = this.keyMap[key]; this.isKeyHolding[lane] = false; this.handlePressEnd(lane);
                         }
                     });
 
-                    // タッチ・マウス操作対応
                     for (let i = 0; i < 4; i++) {
                         const laneEl = document.getElementById(`lane-${i}`);
                         if (!laneEl) continue;
@@ -507,24 +453,15 @@
                         const endEvent = 'ontouchstart' in window ? 'touchend' : 'mouseup';
 
                         laneEl.addEventListener(startEvent, (e) => {
-                            if (!this.isBgVisible) return;
-                            e.preventDefault();
-                            if (!this.isKeyHolding[i]) {
-                                this.isKeyHolding[i] = true;
-                                this.handlePressStart(i);
-                            }
+                            if (!this.isBgVisible) return; e.preventDefault();
+                            if (!this.isKeyHolding[i]) { this.isKeyHolding[i] = true; this.handlePressStart(i); }
                         });
                         laneEl.addEventListener(endEvent, (e) => {
-                            if (!this.isBgVisible) return;
-                            e.preventDefault();
-                            this.isKeyHolding[i] = false;
-                            this.handlePressEnd(i);
+                            if (!this.isBgVisible) return; e.preventDefault();
+                            this.isKeyHolding[i] = false; this.handlePressEnd(i);
                         });
                         laneEl.addEventListener('mouseleave', (e) => {
-                            if (this.isKeyHolding[i]) {
-                                this.isKeyHolding[i] = false;
-                                this.handlePressEnd(i);
-                            }
+                            if (this.isKeyHolding[i]) { this.isKeyHolding[i] = false; this.handlePressEnd(i); }
                         });
                     }
                 },
@@ -532,7 +469,6 @@
                 toggleBackground() {
                     const videoContainer = document.getElementById('video-container');
                     const btnToggleBg = document.getElementById('btn-toggle-bg');
-                    if (!videoContainer || !btnToggleBg) return;
                     this.isBgVisible = !this.isBgVisible;
                     if (this.isBgVisible) {
                         videoContainer.style.zIndex = '1'; videoContainer.style.opacity = '0.25'; videoContainer.style.pointerEvents = 'none';
@@ -545,14 +481,12 @@
 
                 togglePlayback() {
                     if (!window.GameAudio || !window.GameAudio.player) return;
-                    try {
-                        if (window.GameAudio.player.getPlayerState() === 1) window.GameAudio.pause();
-                        else window.GameAudio.play();
-                    } catch (e) { window.GameAudio.play(); }
+                    if (window.GameAudio.player.getPlayerState() === 1) window.GameAudio.pause();
+                    else window.GameAudio.play();
                 },
 
                 handlePressStart(lane) {
-                    const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
+                    const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : 0;
                     this.pressTimestamps[lane] = currentTime;
                     const laneEl = document.getElementById(`lane-${lane}`);
                     if (laneEl) laneEl.classList.add('active-tap');
@@ -563,7 +497,7 @@
                     const laneEl = document.getElementById(`lane-${lane}`);
                     if (laneEl) laneEl.classList.remove('active-tap');
                     if (this.pressTimestamps[lane] === null) return;
-                    const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
+                    const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : 0;
 
                     if (this.currentMode === 'record') {
                         const startTime = this.pressTimestamps[lane];
@@ -619,8 +553,17 @@
                     document.getElementById('score-display').textContent = 'SCORE: 0000000';
                     document.getElementById('combo-display').textContent = '0 COMBO';
                     document.getElementById('judgment-display').textContent = '';
+                    
+                    const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : 0;
                     if (window.GameAudio && window.GameAudio.notesData) {
-                        window.GameAudio.notesData.forEach(n => { n.judged = false; n.holdStarted = false; });
+                        window.GameAudio.notesData.forEach(n => {
+                            // 再生ヘッドより未来のノーツだけ未判定に戻す（巻き戻し再生に対応）
+                            if (n.time >= currentTime - this.judgments.miss) {
+                                n.judged = false; n.holdStarted = false;
+                            } else {
+                                n.judged = true; // 過ぎ去った位置のものは判定済みに
+                            }
+                        });
                     }
                 },
 
@@ -786,7 +729,6 @@
                     const laneHeight = lanesContainer.clientHeight;
                     const targetY = laneHeight * 0.85; 
 
-                    // 帯描画
                     this.getLongNotePairs().forEach(pair => {
                         if (pair.end.judged) return;
                         const startTimeDiff = pair.start.time - currentTime;
@@ -812,7 +754,6 @@
                         }
                     });
 
-                    // 単発/ノーツ描画
                     window.GameAudio.notesData.forEach(note => {
                         if (note.judged) return;
                         const timeDiff = note.time - currentTime;
@@ -841,7 +782,7 @@
         }
 
         /* ==========================================
-           【エディタ管理機構 (GameVisuals)】
+           【エディタロジック】
            ========================================== */
         if (typeof window.GameVisuals === 'undefined') {
             window.GameVisuals = {
