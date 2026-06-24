@@ -1,0 +1,251 @@
+/* 全体設定 */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background-color: #0d0e15;
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* 上部：コントロールパネル */
+#control-panel {
+    background-color: #1a1c29;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #2a2e45;
+    z-index: 10;
+}
+
+.panel-section {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+input[type="text"] {
+    background-color: #11121a;
+    border: 1px solid #3d4363;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    width: 260px;
+    font-size: 14px;
+}
+
+button {
+    background-color: #3b4260;
+    border: none;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+    font-size: 14px;
+}
+
+button:hover {
+    background-color: #4f5880;
+}
+
+button.active {
+    background-color: #ff007f;
+    box-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
+}
+
+/* 中央：ゲームプレイエリア */
+#game-area {
+    flex: 1;
+    position: relative;
+    background: radial-gradient(circle at center, #1b1d36 0%, #080911 100%);
+    overflow: hidden;
+}
+
+/* YouTube 背景埋め込み */
+#video-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    opacity: 0.25; /* プレイの邪魔にならないよう薄くする */
+    pointer-events: none; /* ゲーム画面のクリックを邪魔しない */
+    z-index: 1;
+}
+
+#youtube-player {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* 音ゲーレーン（3D風奥行き演出） */
+#game-lanes {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 450px;
+    height: 85%;
+    background-color: rgba(16, 18, 35, 0.75);
+    border-left: 3px solid #ff007f;
+    border-right: 3px solid #ff007f;
+    display: flex;
+    z-index: 2;
+    /* 3D効果をつけるための設定 */
+    perspective: 150px;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotateX(12deg);
+}
+
+.lane {
+    flex: 1;
+    position: relative;
+    border-right: 1px dashed rgba(255, 255, 255, 0.15);
+    height: 100%;
+    cursor: pointer;
+}
+
+.lane:last-child {
+    border-right: none;
+}
+
+/* キー操作ガイド */
+.lane-key-guide {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+}
+
+/* レーンが押されたときの発光エフェクト */
+.lane.active-tap {
+    background: linear-gradient(to top, rgba(0, 229, 255, 0.4) 0%, rgba(0, 229, 255, 0) 80%);
+}
+
+.lane.active-slide {
+    background: linear-gradient(to top, rgba(255, 234, 0, 0.4) 0%, rgba(255, 234, 0, 0) 80%);
+}
+
+/* 判定ライン */
+#judgment-line {
+    position: absolute;
+    bottom: 60px;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(90deg, #ff007f, #00e5ff, #ff007f);
+    box-shadow: 0 0 15px #ff007f, 0 0 5px #00e5ff;
+    pointer-events: none;
+}
+
+/* ノーツのスタイル */
+.note {
+    position: absolute;
+    left: 5%;
+    width: 90%;
+    height: 16px;
+    border-radius: 8px;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+/* タップノーツ（青・水色系） */
+.note-tap {
+    background: linear-gradient(to bottom, #00ffff, #0088cc);
+    box-shadow: 0 0 12px #00ffff;
+    border: 1px solid #fff;
+}
+
+/* スライドノーツ（黄・オレンジ系） */
+.note-slide {
+    background: linear-gradient(to bottom, #ffee00, #ff8800);
+    box-shadow: 0 0 12px #ffee00;
+    border: 1px solid #fff;
+}
+
+/* コンボ・判定文字の表示 */
+#ui-overlay {
+    position: absolute;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 5;
+}
+
+#combo-display {
+    font-size: 32px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 4px #ff007f;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+#judgment-display {
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+    transition: transform 0.05s ease-out;
+}
+
+/* 判定ごとのカラー */
+.jd-perfect { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+.jd-great { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+.jd-good { color: #00ff00; text-shadow: 0 0 10px #00ff00; }
+.jd-miss { color: #888888; }
+
+/* 下部：譜面調整用タイムライン（調整モード時） */
+#editor-panel {
+    background-color: #11121a;
+    border-top: 2px solid #2a2e45;
+    padding: 10px 20px;
+    height: 180px;
+    z-index: 10;
+}
+
+#editor-panel h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #a0a5c1;
+}
+
+#timeline-container {
+    width: 100%;
+    height: 110px;
+    background-color: #1a1c29;
+    border: 1px solid #2a2e45;
+    border-radius: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+    padding: 10px 0;
+}
+
+/* 便利クラス */
+.hidden {
+    display: none !important;
+}
