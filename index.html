@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Music Game</title>
     <style>
-        /* ==========================================
-           【CSSエリア】ここにスタイルをすべて統合
-           ========================================== */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -253,7 +250,7 @@
     <div id="app-container">
         <div id="control-panel">
             <div class="panel-section">
-                <input type="text" id="youtube-url" placeholder="YouTubeのURLを入力">
+                <input type="text" id="youtube-url" placeholder="YouTubeのURLまたは動画IDを入力">
                 <button id="btn-load">読み込み</button>
             </div>
             <div class="panel-section">
@@ -299,7 +296,142 @@
 
     <script>
         /* ==========================================
-           【JavaScriptエリア】ここにロジックをすべて統合
+           【データ＆オーディオ管理機構 (旧audio.js分)】
+           ========================================== */
+        window.GameAudio = {
+            player: null,
+            isReady: false,
+            isRecording: false,
+            notesData: [], // 譜面データ配列
+
+            init() {
+                // YouTube URLの読み込みボタンイベント
+                const btnLoad = document.getElementById('btn-load');
+                if (btnLoad) {
+                    btnLoad.addEventListener('click', () => {
+                        const urlInput = document.getElementById('youtube-url').value;
+                        const videoId = this.extractVideoId(urlInput);
+                        if (videoId) {
+                            this.loadVideo(videoId);
+                        } else {
+                            alert('有効なYouTubeのURLまたは動画IDを入力してください。');
+                        }
+                    });
+                }
+
+                // JSONセーブ・ロード機能
+                const btnSaveJson = document.getElementById('btn-save-json');
+                if (btnSaveJson) {
+                    btnSaveJson.addEventListener('click', () => this.saveNotesAsJson());
+                }
+
+                const fileLoadJson = document.getElementById('file-load-json');
+                if (fileLoadJson) {
+                    fileLoadJson.addEventListener('change', (e) => this.loadNotesFromJson(e));
+                }
+            },
+
+            extractVideoId(url) {
+                if (!url) return null;
+                if (url.length === 11) return url; // 直接IDが入力された場合
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                const match = url.match(regExp);
+                return (match && match[2].length === 11) ? match[2] : null;
+            },
+
+            loadVideo(videoId) {
+                if (this.player && typeof this.player.loadVideoById === 'function') {
+                    this.player.loadVideoById(videoId);
+                } else {
+                    // プレイヤーがまだ生成されていない場合は新規作成
+                    this.player = new YT.Player('youtube-player', {
+                        videoId: videoId,
+                        playerVars: {
+                            'autoplay': 0,
+                            'controls': 1,
+                            'disablekb': 1,
+                            'fs': 0,
+                            'rel': 0,
+                            'showinfo': 0
+                        },
+                        events: {
+                            'onReady': () => { this.isReady = true; },
+                            'onStateChange': (e) => {
+                                // 再生開始時にプレイモードならゲーム側のリセットをかける
+                                if (e.data === YT.PlayerState.PLAYING && window.GameCore.currentMode === 'play') {
+                                    if (window.GameCore.isResultShown) {
+                                        window.GameCore.resetLive();
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            },
+
+            getCurrentTimeMs() {
+                if (this.player && typeof this.player.getCurrentTime === 'function') {
+                    return Math.floor(this.player.getCurrentTime() * 1000);
+                }
+                return 0;
+            },
+
+            play() {
+                if (this.player && typeof this.player.playVideo === 'function') this.player.playVideo();
+            },
+
+            pause() {
+                if (this.player && typeof this.player.pauseVideo === 'function') this.player.pauseVideo();
+            },
+
+            saveNotesAsJson() {
+                if (this.notesData.length === 0) {
+                    alert('保存するノーツデータがありません。');
+                    return;
+                }
+                const cleanData = this.notesData.map(n => ({ time: n.time, lane: n.lane, type: n.type }));
+                const blob = new Blob([JSON.stringify(cleanData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'chart.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            },
+
+            loadNotesFromJson(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const parsed = JSON.parse(event.target.result);
+                        this.notesData = parsed.map(n => ({
+                            time: parseInt(n.time),
+                            lane: parseInt(n.lane),
+                            type: n.type,
+                            judged: false,
+                            holdStarted: false
+                        }));
+                        this.notesData.sort((a, b) => a.time - b.time);
+                        alert(`譜面データを読み込みました (${this.notesData.length} ノーツ)`);
+                        if (window.GameVisuals) window.GameVisuals.updateTimeline();
+                        if (window.GameCore) window.GameCore.resetLive();
+                    } catch (err) {
+                        alert('JSONファイルの読み込みに失敗しました。形式を確認してください。');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        // YouTube Iframe API が読み込まれた際に自動で呼ばれる関数
+        function onYouTubeIframeAPIReady() {
+            window.GameAudio.init();
+        }
+
+        /* ==========================================
+           【ゲームメインロジック (GameCore)】
            ========================================== */
         if (typeof window.GameCore === 'undefined') {
             window.GameCore = {
@@ -342,7 +474,7 @@
                     if (btnToggleBg) btnToggleBg.addEventListener('click', () => this.toggleBackground());
 
                     window.addEventListener('keydown', (e) => {
-                        if (e.repeat) return; // 長押し連打ガード
+                        if (e.repeat) return; // 長押し自動連打ガード
                         const key = e.key.toLowerCase();
                         if (e.key === ' ') {
                             e.preventDefault();
@@ -367,7 +499,7 @@
                         }
                     });
 
-                    // マウス/タッチ操作
+                    // タッチ・マウス操作対応
                     for (let i = 0; i < 4; i++) {
                         const laneEl = document.getElementById(`lane-${i}`);
                         if (!laneEl) continue;
@@ -708,7 +840,9 @@
             window.GameCore.init();
         }
 
-        // エディタ
+        /* ==========================================
+           【エディタ管理機構 (GameVisuals)】
+           ========================================== */
         if (typeof window.GameVisuals === 'undefined') {
             window.GameVisuals = {
                 updateTimeline() {
