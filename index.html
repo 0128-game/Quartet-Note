@@ -35,15 +35,18 @@
 
             <div id="game-lanes">
                 <div class="lane" id="lane-0" data-lane="0">
-                    <div class="lane-key-guide">D</div>
+                    <div class="lane-effect-zone"></div> <div class="lane-key-guide">D</div>
                 </div>
                 <div class="lane" id="lane-1" data-lane="1">
+                    <div class="lane-effect-zone"></div>
                     <div class="lane-key-guide">F</div>
                 </div>
                 <div class="lane" id="lane-2" data-lane="2">
+                    <div class="lane-effect-zone"></div>
                     <div class="lane-key-guide">J</div>
                 </div>
                 <div class="lane" id="lane-3" data-lane="3">
+                    <div class="lane-effect-zone"></div>
                     <div class="lane-key-guide">K</div>
                 </div>
                 
@@ -51,8 +54,17 @@
             </div>
 
             <div id="ui-overlay">
-                <div id="combo-display" class="hidden">0 COMBO</div>
-                <div id="judgment-display"></div>
+                <div id="status-display">
+                    <div id="score-display">SCORE: <span id="score-val">00000000</span></div>
+                    <div id="life-bar-container">
+                        <div id="life-bar"></div>
+                    </div>
+                </div>
+
+                <div id="judgment-center">
+                    <div id="judgment-display"></div>
+                    <div id="combo-display" class="hidden">00</div>
+                </div>
             </div>
         </main>
 
