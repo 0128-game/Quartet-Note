@@ -7,16 +7,21 @@ if (typeof window.GameAudio === 'undefined') {
         notesData: [], 
 
         init() {
+            // YouTube IFrame APIのバインド強化
             if (window.YT && window.YT.Player) {
                 this.isApiReady = true;
                 this.loadPlayer(this.currentVideoId);
             } else {
+                // APIがまだロードされていない場合は、グローバルに待機関数を登録
+                const previousReady = window.onYouTubeIframeAPIReady;
                 window.onYouTubeIframeAPIReady = () => {
+                    if (typeof previousReady === 'function') previousReady();
                     this.isApiReady = true;
                     this.loadPlayer(this.currentVideoId);
                 };
             }
 
+            // 動画読み込みボタン
             const loadBtn = document.getElementById('btn-load-video');
             if (loadBtn) {
                 loadBtn.addEventListener('click', () => {
@@ -31,11 +36,13 @@ if (typeof window.GameAudio === 'undefined') {
                 });
             }
 
+            // 譜面エクスポート
             const exportBtn = document.getElementById('btn-export');
             if (exportBtn) {
                 exportBtn.addEventListener('click', () => this.exportChart());
             }
 
+            // 譜面インポート
             const importFile = document.getElementById('file-import');
             if (importFile) {
                 importFile.addEventListener('change', (e) => this.importChart(e));
@@ -63,7 +70,7 @@ if (typeof window.GameAudio === 'undefined') {
                     playerVars: {
                         autoplay: 0,
                         playsinline: 1,
-                        controls: 1, // 前面モード時に操作できるようにコントローラーは出す設定に変更
+                        controls: 1, 
                         disablekb: 1,
                         rel: 0,
                         origin: currentOrigin 
@@ -72,6 +79,12 @@ if (typeof window.GameAudio === 'undefined') {
                         onReady: (event) => {
                             console.log('YouTube Player Ready:', videoId);
                             event.target.unMute();
+                        },
+                        onStateChange: (event) => {
+                            // 再生状態が変わったことを game.js（全体の進行）側に伝えるためのフック
+                            if (window.GameManager && typeof window.GameManager.onPlayerStateChange === 'function') {
+                                window.GameManager.onPlayerStateChange(event.data);
+                            }
                         },
                         onError: (e) => {
                             console.error('YouTube Player Error:', e.data);
@@ -93,9 +106,16 @@ if (typeof window.GameAudio === 'undefined') {
             return (match && match[2].length === 11) ? match[2] : null;
         },
 
+        // ★ミリ秒精度の取得を確実にする
         getCurrentTimeMs() {
             if (!this.player || typeof this.player.getCurrentTime !== 'function') return 0;
             return Math.floor(this.player.getCurrentTime() * 1000);
+        },
+
+        // 外部（game.jsなど）から、YouTubeの再生状態（再生中かどうか）を取得しやすくする
+        isPlaying() {
+            if (!this.player || typeof this.player.getPlayerState !== 'function') return false;
+            return this.player.getPlayerState() === 1; // 1 は再生中 (YT.PlayerState.PLAYING)
         },
 
         play() {
@@ -120,6 +140,7 @@ if (typeof window.GameAudio === 'undefined') {
             if (!this.isRecording) return;
 
             const currentTime = this.getCurrentTimeMs();
+            // 50ms以内の同一レーンの重複タップをガード
             const isDuplicate = this.notesData.some(note => 
                 note.lane === lane && Math.abs(note.time - currentTime) < 50
             );
@@ -127,13 +148,16 @@ if (typeof window.GameAudio === 'undefined') {
             if (!isDuplicate) {
                 this.notesData.push({
                     time: currentTime,
-                    lane: lane,
-                    type: type
+                    lane: parseInt(lane, 10),
+                    type: type // 'tap' や 'slide' など
                 });
                 this.notesData.sort((a, b) => a.time - b.time);
                 
+                // タイムライン更新の呼び出し先を統一的にハンドリングできるように調整可能にする
                 if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
                     window.GameVisuals.updateTimeline();
+                } else if (window.GameManager && typeof window.GameManager.updateTimeline === 'function') {
+                    window.GameManager.updateTimeline();
                 }
             }
         },
@@ -174,6 +198,11 @@ if (typeof window.GameAudio === 'undefined') {
                         this.notesData = imported.notes;
                         
                         this.loadPlayer(this.currentVideoId);
+                        
+                        // インポート後にゲーム側に譜面データを渡すための架け橋
+                        if (window.GameManager && typeof window.GameManager.loadChart === 'function') {
+                            window.GameManager.loadChart(this.notesData);
+                        }
                         
                         if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
                             window.GameVisuals.updateTimeline();
