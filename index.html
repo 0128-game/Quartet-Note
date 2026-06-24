@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Music Game Creator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container">
+        <header id="control-panel">
+            <div class="panel-section">
+                <input type="text" id="youtube-url" placeholder="YouTube動画のURLを入力">
+                <button id="btn-load-video">動画を読み込み</button>
+            </div>
+            
+            <div class="panel-section">
+                <button id="btn-mode-play" class="active">プレイモード</button>
+                <button id="btn-mode-record">録音（譜面作成）モード</button>
+                <button id="btn-mode-edit">調整モード</button>
+            </div>
+
+            <div class="panel-section">
+                <button id="btn-toggle-bg">プレイヤー: 背景</button>
+                <button id="btn-export">譜面をエクスポート</button>
+                <input type="file" id="file-import" accept=".json" style="display: none;">
+                <button id="btn-import-trigger" onclick="document.getElementById('file-import').click()">譜面をインポート</button>
+            </div>
+        </header>
+
+        <main id="game-area">
+            <div id="video-container">
+                <div id="youtube-player"></div>
+            </div>
+
+            <div id="game-lanes">
+                <div class="lane" id="lane-0" data-lane="0">
+                    <div class="lane-key-guide">D</div>
+                </div>
+                <div class="lane" id="lane-1" data-lane="1">
+                    <div class="lane-key-guide">F</div>
+                </div>
+                <div class="lane" id="lane-2" data-lane="2">
+                    <div class="lane-key-guide">J</div>
+                </div>
+                <div class="lane" id="lane-3" data-lane="3">
+                    <div class="lane-key-guide">K</div>
+                </div>
+                
+                <div id="judgment-line"></div>
+            </div>
+
+            <div id="ui-overlay">
+                <div id="combo-display" class="hidden">0 COMBO</div>
+                <div id="judgment-display"></div>
+            </div>
+        </main>
+
+        <footer id="editor-panel" class="hidden">
+            <h3>譜面最終調整タイムライン</h3>
+            <div id="timeline-container">
+                </div>
+        </footer>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
