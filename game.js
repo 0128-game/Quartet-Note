@@ -1,4 +1,3 @@
-// 重複宣言エラー（SyntaxError）を防ぐため、windowオブジェクトのプロパティとして定義
 if (typeof window.GameCore === 'undefined') {
     window.GameCore = {
         currentMode: 'play', 
@@ -15,7 +14,9 @@ if (typeof window.GameCore === 'undefined') {
         },
 
         keyMap: { 'd': 0, 'f': 1, 'j': 2, 'k': 3 },
-        currentRecordType: 'tap', 
+        
+        // 長押し判定用のタイムスタンプ管理（レーンごと）
+        pressTimestamps: { 0: null, 1: null, 2: null, 3: null },
 
         init() {
             this.setupEventListeners();
@@ -31,35 +32,33 @@ if (typeof window.GameCore === 'undefined') {
             if (btnRecord) btnRecord.addEventListener('click', () => this.switchMode('record'));
             if (btnEdit) btnEdit.addEventListener('click', () => this.switchMode('edit'));
 
+            // キーボード：押したとき
             window.addEventListener('keydown', (e) => {
                 const key = e.key.toLowerCase();
                 if (this.keyMap.hasOwnProperty(key)) {
                     const lane = this.keyMap[key];
-                    this.handleInput(lane);
+                    // 長押しの連続入力を防ぐガード
+                    if (this.pressTimestamps[lane] === null) {
+                        this.handlePressStart(lane);
+                    }
                 }
-                if (e.key === 'Shift' && this.currentMode === 'record') {
-                    this.currentRecordType = this.currentRecordType === 'tap' ? 'slide' : 'tap';
-                    console.log(`記録ノーツタイプ変更: ${this.currentRecordType}`);
-                }
+                // スペースキーで再生・一時停止（最優先）
                 if (e.key === ' ') {
                     e.preventDefault();
-                    if (window.GameAudio && window.GameAudio.player && window.GameAudio.player.getPlayerState() === 1) {
-                        window.GameAudio.pause();
-                    } else if (window.GameAudio) {
-                        window.GameAudio.play();
-                    }
+                    this.togglePlayback();
                 }
             });
 
+            // キーボード：離したとき
             window.addEventListener('keyup', (e) => {
                 const key = e.key.toLowerCase();
                 if (this.keyMap.hasOwnProperty(key)) {
                     const lane = this.keyMap[key];
-                    const laneEl = document.getElementById(`lane-${lane}`);
-                    if (laneEl) laneEl.classList.remove('active-tap', 'active-slide');
+                    this.handlePressEnd(lane);
                 }
             });
 
+            // 画面タッチ・マウス操作
             for (let i = 0; i < 4; i++) {
                 const laneEl = document.getElementById(`lane-${i}`);
                 if (!laneEl) continue;
@@ -69,12 +68,105 @@ if (typeof window.GameCore === 'undefined') {
 
                 laneEl.addEventListener(startEvent, (e) => {
                     e.preventDefault();
-                    this.handleInput(i);
+                    this.handlePressStart(i);
                 });
                 laneEl.addEventListener(endEvent, (e) => {
                     e.preventDefault();
-                    laneEl.classList.remove('active-tap', 'active-slide');
+                    this.handlePressEnd(i);
                 });
+                // マウスがレーン外に出て離されたときの対策
+                laneEl.addEventListener('mouseleave', (e) => {
+                    if (this.pressTimestamps[i] !== null) {
+                        this.handlePressEnd(i);
+                    }
+                });
+            }
+        },
+
+        // 再生・一時停止の切り替え
+        togglePlayback() {
+            if (!window.GameAudio || !window.GameAudio.player) return;
+            try {
+                const state = window.GameAudio.player.getPlayerState();
+                if (state === 1) { // 再生中なら一時停止
+                    window.GameAudio.pause();
+                } else { // 停止中なら再生
+                    window.GameAudio.play();
+                }
+            } catch (e) {
+                window.GameAudio.play();
+            }
+        },
+
+        // ボタン/キーを「押した」瞬間
+        handlePressStart(lane) {
+            // 押した時の楽曲位置（ミリ秒）を記録
+            if (window.GameAudio) {
+                this.pressTimestamps[lane] = window.GameAudio.getCurrentTimeMs();
+            } else {
+                this.pressTimestamps[lane] = Date.now();
+            }
+
+            // レーン発光（デフォルトはタップ色）
+            const laneEl = document.getElementById(`lane-${lane}`);
+            if (laneEl) laneEl.classList.add('active-tap');
+
+            // プレイモードなら、押した瞬間に即座に判定
+            if (this.currentMode === 'play') {
+                this.judgeNote(lane);
+            }
+        },
+
+        // ボタン/キーを「離した」瞬間
+        handlePressEnd(lane) {
+            const laneEl = document.getElementById(`lane-${lane}`);
+            if (laneEl) laneEl.classList.remove('active-tap', 'active-slide');
+
+            if (this.pressTimestamps[lane] === null) return;
+
+            // 録音モードの時、離したタイミングで長さを計測
+            if (this.currentMode === 'record' && window.GameAudio) {
+                const startTime = this.pressTimestamps[lane];
+                const endTime = window.GameAudio.getCurrentTimeMs();
+                const duration = endTime - startTime;
+
+                if (duration >= 500) {
+                    // 【長押し（0.5秒以上）の場合】
+                    // 始点を「tap」ノーツ、終点を「slide」ノーツとして両方記録する
+                    this.recordEvaluatedNote(lane, startTime, 'tap');
+                    this.recordEvaluatedNote(lane, endTime, 'slide');
+                } else {
+                    // 【通常タップ（0.5秒未満）の場合】
+                    // 始点のタイミングだけを「tap」として記録
+                    this.recordEvaluatedNote(lane, startTime, 'tap');
+                }
+            }
+
+            // タイムスタンプをリセット
+            this.pressTimestamps[lane] = null;
+        },
+
+        // 判別したノーツをAudioオブジェクトのデータ配列に追加
+        recordEvaluatedNote(lane, targetTime, type) {
+            if (!window.GameAudio || !window.GameAudio.isRecording) return;
+
+            // 同一レーン・ほぼ同時刻（50ms未満）の重複登録をガード
+            const isDuplicate = window.GameAudio.notesData.some(note => 
+                note.lane === lane && Math.abs(note.time - targetTime) < 50
+            );
+
+            if (!isDuplicate) {
+                window.GameAudio.notesData.push({
+                    time: targetTime,
+                    lane: lane,
+                    type: type
+                });
+                // 時間順に綺麗にソート
+                window.GameAudio.notesData.sort((a, b) => a.time - b.time);
+                
+                if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                    window.GameVisuals.updateTimeline();
+                }
             }
         },
 
@@ -96,7 +188,7 @@ if (typeof window.GameCore === 'undefined') {
             } else if (mode === 'record') {
                 document.getElementById('btn-mode-record').classList.add('active');
                 if (window.GameAudio) window.GameAudio.isRecording = true;
-                alert('録音モード: スペースキーまたは画面タップで音楽が始まります。DFJKでノーツを記録、Shiftでタップ/スライド切り替え。');
+                alert('録音モード: スペースキーを押すと音楽が始まります。音楽に合わせてキー（DFJK）やレーンを長押しすると、始点(TAP)と終点(SLIDE)が自動記録されます。');
             } else if (mode === 'edit') {
                 document.getElementById('btn-mode-edit').classList.add('active');
                 document.getElementById('editor-panel').classList.remove('hidden');
@@ -110,20 +202,6 @@ if (typeof window.GameCore === 'undefined') {
             document.getElementById('judgment-display').textContent = '';
             if (window.GameAudio && window.GameAudio.notesData) {
                 window.GameAudio.notesData.forEach(n => n.judged = false);
-            }
-        },
-
-        handleInput(lane) {
-            const laneEl = document.getElementById(`lane-${lane}`);
-            if (!laneEl) return;
-            
-            const activeClass = this.currentMode === 'record' && this.currentRecordType === 'slide' ? 'active-slide' : 'active-tap';
-            laneEl.classList.add(activeClass);
-
-            if (this.currentMode === 'record') {
-                if (window.GameAudio) window.GameAudio.recordNote(lane, this.currentRecordType);
-            } else if (this.currentMode === 'play') {
-                this.judgeNote(lane);
             }
         },
 
