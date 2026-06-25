@@ -30,7 +30,7 @@ if (typeof window.GameCore === 'undefined') {
             this.startGameLoop();
         },
 
-        setupEventListeners() {
+setupEventListeners() {
             const btnPlay = document.getElementById('btn-mode-play');
             const btnRecord = document.getElementById('btn-mode-record');
             const btnEdit = document.getElementById('btn-mode-edit');
@@ -44,8 +44,50 @@ if (typeof window.GameCore === 'undefined') {
                 btnToggleBg.addEventListener('click', () => this.toggleBackground());
             }
 
+            // ★ 新規追加: 譜面情報編集ボタンのイベント
+            const btnEditMeta = document.getElementById('btn-edit-meta');
+            if (btnEditMeta) {
+                btnEditMeta.addEventListener('click', () => {
+                    this.openMetaDialog(false); // 編集モード(書き込み可能)で開く
+                });
+            }
+
+            // ★ 新規追加: ダイアログを閉じるボタンのイベント
+            const btnDialogClose = document.getElementById('btn-dialog-close');
+            const metaDialog = document.getElementById('meta-dialog');
+            if (btnDialogClose && metaDialog) {
+                btnDialogClose.addEventListener('click', () => {
+                    if (window.GameAudio) {
+                        window.GameAudio.metaData = {
+                            title: document.getElementById('meta-title').value || "無題の楽曲",
+                            author: document.getElementById('meta-author').value || "名無し",
+                            difficultyType: document.getElementById('meta-difficulty-type').value,
+                            difficultyLevel: document.getElementById('meta-difficulty-level').value,
+                            comment: document.getElementById('meta-comment').value
+                        };
+                    }
+                    metaDialog.classList.add('hidden-dialog');
+                    this.isDialogActive = false; // ★ ダイアログを閉じたので入力を許可
+                });
+            }
+
+            // ★ 新規追加: エクスポートボタンの処理書き換え
+            const btnExport = document.getElementById('btn-export');
+            if (btnExport) {
+                btnExport.addEventListener('click', () => this.exportChartWithMeta());
+            }
+
+            // ★ 新規追加: インポート（ファイル選択時）の処理書き換え
+            const fileImport = document.getElementById('file-import');
+            if (fileImport) {
+                fileImport.addEventListener('change', (e) => this.importChartWithMeta(e));
+            }
+
             // キーボード：押したとき
             window.addEventListener('keydown', (e) => {
+                // ★ ダイアログが表示されている間はゲームへのキー入力を完全に無視（暴発防止）
+                if (this.isDialogActive) return;
+
                 const key = e.key.toLowerCase();
                 
                 if (e.key === ' ') {
@@ -65,6 +107,9 @@ if (typeof window.GameCore === 'undefined') {
 
             // キーボード：離したとき
             window.addEventListener('keyup', (e) => {
+                // ★ ダイアログ表示中はキー離しも無視
+                if (this.isDialogActive) return;
+
                 const key = e.key.toLowerCase();
                 if (this.isBgVisible && this.keyMap.hasOwnProperty(key)) {
                     const lane = this.keyMap[key];
@@ -82,7 +127,7 @@ if (typeof window.GameCore === 'undefined') {
                 const endEvent = 'ontouchstart' in window ? 'touchend' : 'mouseup';
 
                 laneEl.addEventListener(startEvent, (e) => {
-                    if (!this.isBgVisible) return;
+                    if (this.isDialogActive || !this.isBgVisible) return;
                     e.preventDefault();
                     if (!this.isKeyHolding[i]) {
                         this.isKeyHolding[i] = true;
@@ -90,18 +135,109 @@ if (typeof window.GameCore === 'undefined') {
                     }
                 });
                 laneEl.addEventListener(endEvent, (e) => {
-                    if (!this.isBgVisible) return;
+                    if (this.isDialogActive || !this.isBgVisible) return;
                     e.preventDefault();
                     this.isKeyHolding[i] = false;
                     this.handlePressEnd(i);
                 });
                 laneEl.addEventListener('mouseleave', (e) => {
-                    if (this.isKeyHolding[i]) {
-                        this.isKeyHolding[i] = false;
-                        this.handlePressEnd(i);
-                    }
+                    if (this.isDialogActive || !this.isKeyHolding[i]) return;
+                    this.isKeyHolding[i] = false;
+                    this.handlePressEnd(i);
                 });
             }
+        },
+
+        // ★ 新規追加: ダイアログを開いてデータを同期する関数
+        openMetaDialog(isReadOnly = false) {
+            this.isDialogActive = true; // フラグを立ててスペースキー入力を一時ロック
+            const metaDialog = document.getElementById('meta-dialog');
+            if (!metaDialog) return;
+
+            const meta = window.GameAudio?.metaData || { title: "", author: "", difficultyType: "MASTER", difficultyLevel: "30", comment: "" };
+
+            // 画面の入力欄に現在のデータをセット
+            document.getElementById('meta-title').value = meta.title;
+            document.getElementById('meta-author').value = meta.author;
+            document.getElementById('meta-difficulty-type').value = meta.difficultyType;
+            document.getElementById('meta-difficulty-level').value = meta.difficultyLevel;
+            document.getElementById('meta-comment').value = meta.comment;
+
+            // 読み取り専用の切り替え設定
+            const inputs = [
+                document.getElementById('meta-title'),
+                document.getElementById('meta-author'),
+                document.getElementById('meta-difficulty-type'),
+                document.getElementById('meta-difficulty-level'),
+                document.getElementById('meta-comment')
+            ];
+            inputs.forEach(input => input.disabled = isReadOnly);
+
+            metaDialog.classList.remove('hidden-dialog');
+        },
+
+        // ★ 新規追加: メタデータを含めた新しいエクスポート処理
+        exportChartWithMeta() {
+            if (!window.GameAudio) return;
+
+            const meta = {
+                title: document.getElementById('meta-title').value || "無題の楽曲",
+                author: document.getElementById('meta-author').value || "名無し",
+                difficultyType: document.getElementById('meta-difficulty-type').value,
+                difficultyLevel: document.getElementById('meta-difficulty-level').value,
+                comment: document.getElementById('meta-comment').value
+            };
+            window.GameAudio.metaData = meta;
+
+            const outputPackage = {
+                meta: window.GameAudio.metaData,
+                notes: window.GameAudio.notesData
+            };
+
+            const jsonStr = JSON.stringify(outputPackage, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const difficultyString = `${meta.difficultyType}_Lv${meta.difficultyLevel}`;
+            const fileName = `${meta.title}-${meta.author}-${difficultyString}.json`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        },
+
+        // ★ 新規追加: メタデータに対応した新しいインポート処理
+        importChartWithMeta(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    if (data.meta && data.notes) {
+                        window.GameAudio.metaData = data.meta;
+                        window.GameAudio.notesData = data.notes;
+                    } else if (Array.isArray(data)) {
+                        window.GameAudio.notesData = data;
+                        window.GameAudio.metaData = { title: "インポート楽曲", author: "不明", difficultyType: "MASTER", difficultyLevel: "30", comment: "" };
+                    }
+
+                    this.sortAndRefreshTimeline();
+                    this.resetLive();
+
+                    // インポート完了後、確認用ダイアログを表示（読み取り専用モード）
+                    this.openMetaDialog(true); 
+
+                } catch (err) {
+                    alert('JSONファイルの読み込みに失敗しました。フォーマットを確認してください。');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
         },
 
         toggleBackground() {
