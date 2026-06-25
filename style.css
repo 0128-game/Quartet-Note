@@ -384,3 +384,92 @@ button.active {
 .active-hold::after {
     display: none !important;
 }
+
+/* ==========================================
+   楽曲情報確認ダイアログ（モーダル）
+   ========================================== */
+#meta-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999; /* 一番手前に表示 */
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}
+
+#meta-dialog.hidden-dialog {
+    display: none !important;
+}
+
+.dialog-content {
+    background-color: #1a1d33;
+    border: 2px solid #00ffff;
+    box-shadow: 0 0 25px rgba(0, 255, 255, 0.4);
+    border-radius: 8px;
+    width: 400px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.dialog-content h2 {
+    font-size: 18px;
+    color: #00ffff;
+    text-align: center;
+    border-bottom: 1px solid #2a2e45;
+    padding-bottom: 10px;
+}
+
+.dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dialog-body label {
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    color: #8b92b5;
+    gap: 5px;
+}
+
+.dialog-body input, .dialog-body select, .dialog-body textarea {
+    background-color: #0b0c16;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100%;
+}
+
+.dialog-body textarea {
+    height: 80px;
+    resize: none;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 5px;
+}
+
+#btn-dialog-close {
+    background-color: #ff007f;
+    box-shadow: 0 0 10px #ff007f;
+    color: #fff;
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+}
+#btn-dialog-close:hover {
+    background-color: #ff2a93;
+}
