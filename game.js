@@ -4,8 +4,6 @@ if (typeof window.GameCore === 'undefined') {
         score: 0,
         combo: 0,
         maxCombo: 0,
-        life: 1000, // プロセカ仕様の初期ライフ
-        maxLife: 1000,
         noteSpeedMs: 1000, 
         
         judgments: {
@@ -24,28 +22,12 @@ if (typeof window.GameCore === 'undefined') {
         // プレイヤー位置フラグ (true=背景、false=前面)
         isBgVisible: true, 
 
-        // 録音中（ホールド中）のノーツを各レーンごとに記憶する一時バッファ
+        // ★新しく追加：現在各レーンで生成した「仮の始点と終点」を記憶するバッファ
         recordingNotes: { 0: null, 1: null, 2: null, 3: null },
 
         init() {
             this.setupEventListeners();
-            this.setupBridge();
             this.startGameLoop();
-        },
-
-        // audio.js 等と安全に同期するためのブリッジインターフェース
-        setupBridge() {
-            window.GameManager = {
-                onPlayerStateChange: (state) => {
-                    // オーディオ再生状態の変更通知用
-                },
-                loadChart: (notes) => {
-                    this.resetLive();
-                },
-                updateTimeline: () => {
-                    if (window.GameVisuals) window.GameVisuals.updateTimeline();
-                }
-            };
         },
 
         setupEventListeners() {
@@ -162,26 +144,21 @@ if (typeof window.GameCore === 'undefined') {
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
-            if (laneEl) {
-                // アニメーション用フラッシュクラスと、長押し中クラスの制御
-                laneEl.classList.remove('lane-flashing');
-                void laneEl.offsetWidth; // 強制リフロー
-                laneEl.classList.add('lane-flashing');
-                laneEl.classList.add('active-hold');
-            }
+            // CSS側で押しっぱなしに対応できるよう active-slide クラス等も必要に応じて使えるように維持
+            if (laneEl) laneEl.classList.add('active-tap', 'active-slide');
 
-            // 【録音モード】押した瞬間に始点と仮の終点を同時作成
+            // 【録音モード】押した瞬間に始点(tap)と仮の終点(slide)を両方同時に突っ込む
             if (this.currentMode === 'record') {
                 if (window.GameAudio && window.GameAudio.isRecording) {
+                    // 重複チェックを回避しつつ安全に仮ノーツオブジェクトを作成
                     const startNote = {
                         time: currentTime,
                         lane: lane,
                         type: 'tap',
                         judged: false
                     };
-                    
                     const endNote = {
-                        time: currentTime, // 離した瞬間に更新予定
+                        time: currentTime, // 離したときに更新される仮の時間
                         lane: lane,
                         type: 'slide',
                         judged: false
@@ -190,13 +167,17 @@ if (typeof window.GameCore === 'undefined') {
                     window.GameAudio.notesData.push(startNote);
                     window.GameAudio.notesData.push(endNote);
 
-                    // 離した瞬間に判定・操作するため参照をキープ
+                    // 離した瞬間に操作を確定させるためオブジェクトへの参照を保存
                     this.recordingNotes[lane] = { start: startNote, end: endNote };
-                    
-                    this.sortAndRefreshTimeline();
+
+                    // タイムラインのソートと描画更新
+                    window.GameAudio.notesData.sort((a, b) => a.time - b.time);
+                    if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                        window.GameVisuals.updateTimeline();
+                    }
                 }
             } 
-            // 【プレイモード】
+            // プレイモード：押した瞬間の判定（始点 or 単発）
             else if (this.currentMode === 'play') {
                 this.judgeOnPress(lane, currentTime);
             }
@@ -205,47 +186,63 @@ if (typeof window.GameCore === 'undefined') {
         // 【離した瞬間】の処理
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
-            if (laneEl) {
-                laneEl.classList.remove('active-hold');
-            }
+            if (laneEl) laneEl.classList.remove('active-tap', 'active-slide');
 
             if (this.pressTimestamps[lane] === null) return;
 
             const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
 
-            // 【録音モード】0.5秒のホールド時間を閾値としてタップかスライドかを確定
             if (this.currentMode === 'record') {
+                // 【録音モード】
                 const session = this.recordingNotes[lane];
-                
+
                 if (session) {
                     const duration = currentTime - session.start.time;
 
                     if (duration < 500) {
-                        // 0.5秒未満ならタップ扱い。不要な仮の終点(slide)を削除
+                        // 0.5秒以内ならタップ単発にする：仮で作った終点(slide)を配列から取り除く
                         window.GameAudio.notesData = window.GameAudio.notesData.filter(note => note !== session.end);
                     } else {
-                        // 0.5秒以上ならスライド（ロングノーツ）確定。終点時間を現時刻に更新
+                        // 0.5秒以上ならスライド確定：終点ノーツの時間を離した瞬間に確定
                         session.end.time = currentTime;
                     }
 
-                    this.sortAndRefreshTimeline();
-                    this.recordingNotes[lane] = null; // セッション終了
+                    // データを再ソートしてタイムラインの表示を同期
+                    window.GameAudio.notesData.sort((a, b) => a.time - b.time);
+                    if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                        window.GameVisuals.updateTimeline();
+                    }
+
+                    this.recordingNotes[lane] = null; // このレーンのセッションをリセット
                 }
-            } 
-            // 【プレイモード】離した瞬間の終点判定
-            else if (this.currentMode === 'play') {
+            } else if (this.currentMode === 'play') {
+                // 【プレイモード】離した瞬間の「終点（離し）判定」を実行
                 this.judgeOnRelease(lane, currentTime);
             }
 
             this.pressTimestamps[lane] = null;
         },
 
-        sortAndRefreshTimeline() {
-            if (window.GameAudio && window.GameAudio.notesData) {
+        // ※元のコードにあったメソッドですが、新しい録音ロジックがPressStart/End内で完結しているためこのメソッドは経由しません（競合防止のためそのまま残しています）
+        recordEvaluatedNote(lane, targetTime, type) {
+            if (!window.GameAudio || !window.GameAudio.isRecording) return;
+
+            const isDuplicate = window.GameAudio.notesData.some(note => 
+                note.lane === lane && Math.abs(note.time - targetTime) < 50
+            );
+
+            if (!isDuplicate) {
+                window.GameAudio.notesData.push({
+                    time: targetTime,
+                    lane: lane,
+                    type: type,
+                    judged: false
+                });
                 window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-            }
-            if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
-                window.GameVisuals.updateTimeline();
+                
+                if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                    window.GameVisuals.updateTimeline();
+                }
             }
         },
 
@@ -256,20 +253,18 @@ if (typeof window.GameCore === 'undefined') {
             document.getElementById('btn-mode-record').classList.remove('active');
             document.getElementById('btn-mode-edit').classList.remove('active');
             document.getElementById('editor-panel').classList.add('hidden');
-            
-            const judgmentCenter = document.getElementById('judgment-center');
-            if (judgmentCenter) judgmentCenter.classList.add('hidden');
+            document.getElementById('combo-display').classList.add('hidden');
             
             if (window.GameAudio) window.GameAudio.isRecording = false;
 
             if (mode === 'play') {
                 document.getElementById('btn-mode-play').classList.add('active');
-                if (judgmentCenter) judgmentCenter.classList.remove('hidden');
+                document.getElementById('combo-display').classList.remove('hidden');
                 this.resetLive();
             } else if (mode === 'record') {
                 document.getElementById('btn-mode-record').classList.add('active');
                 if (window.GameAudio) window.GameAudio.isRecording = true;
-                alert('録音モード: スペースキーで再生。長押しすると自動的にスライドノーツになります。');
+                alert('録音モード: スペースキーで再生。長押しでスライドノーツが作成されます。');
             } else if (mode === 'edit') {
                 document.getElementById('btn-mode-edit').classList.add('active');
                 document.getElementById('editor-panel').classList.remove('hidden');
@@ -279,45 +274,13 @@ if (typeof window.GameCore === 'undefined') {
 
         resetLive() {
             this.combo = 0;
-            this.score = 0;
-            this.life = this.maxLife;
-            
-            this.updateUiDisplays();
-            
-            const display = document.getElementById('judgment-display');
-            if (display) display.textContent = '';
-
+            document.getElementById('combo-display').textContent = '0 COMBO';
+            document.getElementById('judgment-display').textContent = '';
             if (window.GameAudio && window.GameAudio.notesData) {
                 window.GameAudio.notesData.forEach(n => {
                     n.judged = false;
                     n.holdStarted = false; 
                 });
-            }
-        },
-
-        updateUiDisplays() {
-            const scoreEl = document.getElementById('score-display');
-            if (scoreEl) {
-                scoreEl.textContent = String(this.score).padStart(7, '0');
-            }
-
-            const comboEl = document.getElementById('combo-display');
-            if (comboEl) {
-                comboEl.textContent = `${this.combo} COMBO`;
-            }
-
-            const lifeBar = document.getElementById('life-bar');
-            if (lifeBar) {
-                const percentage = Math.max(0, (this.life / this.maxLife) * 100);
-                lifeBar.style.width = `${percentage}%`;
-                
-                if (percentage < 30) {
-                    lifeBar.style.background = 'linear-gradient(to right, #ff0055, #ff0000)';
-                    lifeBar.style.boxShadow = '0 0 8px #ff0000';
-                } else {
-                    lifeBar.style.background = 'linear-gradient(to right, #00ffaa, #00ff55)';
-                    lifeBar.style.boxShadow = '0 0 8px #00ff55';
-                }
             }
         },
 
@@ -334,13 +297,15 @@ if (typeof window.GameCore === 'undefined') {
             const rating = this.calculateRating(targetNote.time, currentTime);
             targetNote.judged = true;
 
-            this.processRatingEffect(rating);
-            
+            // 始点がMISSじゃなければ、このレーンのロング判定用ホールドフラグをONにする
             if (rating !== 'MISS') {
                 const hasEndNote = window.GameAudio.notesData.some(n => n.lane === lane && n.type === 'slide' && n.time > targetNote.time && !n.judged);
                 if (hasEndNote) {
                     targetNote.holdStarted = true;
                 }
+                this.combo++;
+            } else {
+                this.combo = 0;
             }
 
             this.displayJudgment(rating, this.getRatingClass(rating));
@@ -350,39 +315,28 @@ if (typeof window.GameCore === 'undefined') {
         judgeOnRelease(lane, currentTime) {
             const pairs = this.getLongNotePairs();
             
+            // 現在のレーンで、現在ホールド中かつ終点が未判定のロングノーツを探す
             const activePair = pairs.find(pair => 
                 pair.start.lane === lane && pair.start.holdStarted && !pair.end.judged
             );
 
             if (!activePair) return;
 
+            // 終点ノーツの目標時間と、今離した時間の差分で判定
             const rating = this.calculateRating(activePair.end.time, currentTime);
             activePair.end.judged = true;
-            activePair.start.holdStarted = false; 
+            activePair.start.holdStarted = false; // ホールド終了
 
-            this.processRatingEffect(rating);
+            if (rating !== 'MISS') {
+                this.combo++;
+            } else {
+                this.combo = 0;
+            }
+
             this.displayJudgment(rating, this.getRatingClass(rating));
         },
 
-        processRatingEffect(rating) {
-            if (rating === 'PERFECT') {
-                this.score += 1000;
-                this.combo++;
-                this.life = Math.min(this.maxLife, this.life + 10);
-            } else if (rating === 'GREAT') {
-                this.score += 750;
-                this.combo++;
-                this.life = Math.min(this.maxLife, this.life + 5);
-            } else if (rating === 'GOOD') {
-                this.score += 500;
-                this.combo++; 
-            } else if (rating === 'MISS') {
-                this.combo = 0;
-                this.life = Math.max(0, this.life - 100); 
-            }
-            this.updateUiDisplays();
-        },
-
+        // 共通：時間差から判定文字を返す
         calculateRating(targetTime, currentTime) {
             const diff = Math.abs(targetTime - currentTime);
             if (diff <= this.judgments.perfect) return 'PERFECT';
@@ -400,13 +354,17 @@ if (typeof window.GameCore === 'undefined') {
 
         displayJudgment(text, className) {
             const display = document.getElementById('judgment-display');
+            const comboDisplay = document.getElementById('combo-display');
+            
             if (display) {
                 display.textContent = text;
                 display.className = className;
-                
-                display.style.animation = 'none';
-                void display.offsetWidth; 
-                display.style.animation = 'judgmentPop 0.08s ease-out';
+                display.style.transform = 'scale(1.2)';
+                setTimeout(() => display.style.transform = 'scale(1.0)', 50);
+            }
+
+            if (comboDisplay) {
+                comboDisplay.textContent = `${this.combo} COMBO`;
             }
         },
 
@@ -440,27 +398,31 @@ if (typeof window.GameCore === 'undefined') {
             requestAnimationFrame(loop);
         },
 
+        // 道中の押しっぱなし状況と、終点を超えた際の見逃しをリアルタイム監視
         checkLiveHoldNotes() {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             const currentTime = window.GameAudio.getCurrentTimeMs();
             const pairs = this.getLongNotePairs();
 
             pairs.forEach(pair => {
+                // 1. 道中（始点通過後〜終点手前まで）でキーを離していないかチェック
                 if (currentTime > pair.start.time && currentTime < pair.end.time - this.judgments.miss) {
                     if (pair.start.holdStarted && !pair.end.judged) {
+                        // 途中で離してしまった場合は即MISS
                         if (!this.isKeyHolding[pair.start.lane]) {
                             pair.start.holdStarted = false;
                             pair.end.judged = true;
-                            this.processRatingEffect('MISS');
+                            this.combo = 0;
                             this.displayJudgment('MISS', 'jd-miss');
                         }
                     }
                 }
 
+                // 2. 離さないまま終点を完全に通り過ぎてしまった（押しすぎ）場合のMISS判定
                 if (currentTime > pair.end.time + this.judgments.miss && !pair.end.judged) {
                     pair.end.judged = true;
                     pair.start.holdStarted = false;
-                    this.processRatingEffect('MISS');
+                    this.combo = 0;
                     this.displayJudgment('MISS', 'jd-miss');
                 }
             });
@@ -478,7 +440,7 @@ if (typeof window.GameCore === 'undefined') {
             const laneHeight = lanesContainer.clientHeight;
             const targetY = laneHeight * 0.85; 
 
-            // 1. スライドノーツの「帯」を描画
+            // 1. スライドの「帯（ロング中間）」
             const pairs = this.getLongNotePairs();
             pairs.forEach(pair => {
                 if (pair.end.judged) return; 
@@ -507,6 +469,8 @@ if (typeof window.GameCore === 'undefined') {
                         if (pair.start.holdStarted) {
                             bodyEl.style.background = 'linear-gradient(to bottom, #ffee00, #ffaa00)';
                             bodyEl.style.boxShadow = '0 0 15px #ffee00';
+                        } else {
+                            bodyEl.style.background = 'linear-gradient(to bottom, rgba(0,255,200,0.6), rgba(0,200,255,0.6))';
                         }
 
                         const laneEl = document.getElementById(`lane-${pair.start.lane}`);
@@ -515,7 +479,7 @@ if (typeof window.GameCore === 'undefined') {
                 }
             });
 
-            // 2. 頭ノーツ（始点および単発タップ）を描画
+            // 2. 頭ノーツ（始点・単発）
             window.GameAudio.notesData.forEach(note => {
                 if (note.judged) return;
 
@@ -535,6 +499,7 @@ if (typeof window.GameCore === 'undefined') {
             });
         },
 
+        // 見逃しMISS判定（主に単発単体のチェック）
         checkMissedNotes() {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             const currentTime = window.GameAudio.getCurrentTimeMs();
@@ -542,7 +507,7 @@ if (typeof window.GameCore === 'undefined') {
             window.GameAudio.notesData.forEach(note => {
                 if (!note.judged && note.type === 'tap' && (currentTime - note.time) > this.judgments.miss) {
                     note.judged = true;
-                    this.processRatingEffect('MISS');
+                    this.combo = 0;
                     this.displayJudgment('MISS', 'jd-miss');
                 }
             });
