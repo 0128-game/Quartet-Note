@@ -22,7 +22,7 @@ if (typeof window.GameCore === 'undefined') {
         // プレイヤー位置フラグ (true=背景、false=前面)
         isBgVisible: true, 
 
-        // ★新しく追加：現在各レーンで生成した「仮の始点と終点」を記憶するバッファ
+        // 現在各レーンで生成した「仮の始点と終点」を記憶するバッファ
         recordingNotes: { 0: null, 1: null, 2: null, 3: null },
 
         init() {
@@ -144,13 +144,14 @@ if (typeof window.GameCore === 'undefined') {
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
-            // CSS側で押しっぱなしに対応できるよう active-slide クラス等も必要に応じて使えるように維持
-            if (laneEl) laneEl.classList.add('active-tap', 'active-slide');
+            // ピアノタイル風のバグを防ぐため、シンプルに「active-tap」のみを付与してレーン自体を光らせる
+            if (laneEl) {
+                laneEl.classList.add('active-tap');
+            }
 
-            // 【録音モード】押した瞬間に始点(tap)と仮の終点(slide)を両方同時に突っ込む
+            // 【録音モード】押した瞬間に始点(tap)と、未来へ伸ばすための仮の終点(slide)を同時作成
             if (this.currentMode === 'record') {
                 if (window.GameAudio && window.GameAudio.isRecording) {
-                    // 重複チェックを回避しつつ安全に仮ノーツオブジェクトを作成
                     const startNote = {
                         time: currentTime,
                         lane: lane,
@@ -158,7 +159,7 @@ if (typeof window.GameCore === 'undefined') {
                         judged: false
                     };
                     const endNote = {
-                        time: currentTime, // 離したときに更新される仮の時間
+                        time: currentTime, // 離した瞬間に正しい時間へ更新します
                         lane: lane,
                         type: 'slide',
                         judged: false
@@ -167,17 +168,14 @@ if (typeof window.GameCore === 'undefined') {
                     window.GameAudio.notesData.push(startNote);
                     window.GameAudio.notesData.push(endNote);
 
-                    // 離した瞬間に操作を確定させるためオブジェクトへの参照を保存
+                    // 離した瞬間に時間を上書きできるよう参照を保存
                     this.recordingNotes[lane] = { start: startNote, end: endNote };
 
-                    // タイムラインのソートと描画更新
-                    window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-                    if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
-                        window.GameVisuals.updateTimeline();
-                    }
+                    // タイムラインを更新
+                    this.sortAndRefreshTimeline();
                 }
             } 
-            // プレイモード：押した瞬間の判定（始点 or 単発）
+            // プレイモード
             else if (this.currentMode === 'play') {
                 this.judgeOnPress(lane, currentTime);
             }
@@ -186,7 +184,9 @@ if (typeof window.GameCore === 'undefined') {
         // 【離した瞬間】の処理
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
-            if (laneEl) laneEl.classList.remove('active-tap', 'active-slide');
+            if (laneEl) {
+                laneEl.classList.remove('active-tap', 'active-slide');
+            }
 
             if (this.pressTimestamps[lane] === null) return;
 
@@ -200,50 +200,37 @@ if (typeof window.GameCore === 'undefined') {
                     const duration = currentTime - session.start.time;
 
                     if (duration < 500) {
-                        // 0.5秒以内ならタップ単発にする：仮で作った終点(slide)を配列から取り除く
+                        // 0.5秒未満ならタップ単発：仮で作った終点(slide)を完全に削除
                         window.GameAudio.notesData = window.GameAudio.notesData.filter(note => note !== session.end);
+                        console.log("単発タップとして記録しました");
                     } else {
-                        // 0.5秒以上ならスライド確定：終点ノーツの時間を離した瞬間に確定
+                        // 0.5秒以上ならスライド確定：終点ノーツの時間を「今離した時間」に更新
                         session.end.time = currentTime;
+                        console.log("スライド（ロングノーツ）として確定しました");
                     }
 
-                    // データを再ソートしてタイムラインの表示を同期
-                    window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-                    if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
-                        window.GameVisuals.updateTimeline();
-                    }
-
-                    this.recordingNotes[lane] = null; // このレーンのセッションをリセット
+                    this.sortAndRefreshTimeline();
+                    this.recordingNotes[lane] = null; // セッション終了
                 }
             } else if (this.currentMode === 'play') {
-                // 【プレイモード】離した瞬間の「終点（離し）判定」を実行
                 this.judgeOnRelease(lane, currentTime);
             }
 
             this.pressTimestamps[lane] = null;
         },
 
-        // ※元のコードにあったメソッドですが、新しい録音ロジックがPressStart/End内で完結しているためこのメソッドは経由しません（競合防止のためそのまま残しています）
-        recordEvaluatedNote(lane, targetTime, type) {
-            if (!window.GameAudio || !window.GameAudio.isRecording) return;
-
-            const isDuplicate = window.GameAudio.notesData.some(note => 
-                note.lane === lane && Math.abs(note.time - targetTime) < 50
-            );
-
-            if (!isDuplicate) {
-                window.GameAudio.notesData.push({
-                    time: targetTime,
-                    lane: lane,
-                    type: type,
-                    judged: false
-                });
+        // データのソートとタイムラインの見た目をリフレッシュするヘルパー
+        sortAndRefreshTimeline() {
+            if (window.GameAudio && window.GameAudio.notesData) {
                 window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-                
-                if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
-                    window.GameVisuals.updateTimeline();
-                }
             }
+            if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                window.GameVisuals.updateTimeline();
+            }
+        },
+
+        recordEvaluatedNote(lane, targetTime, type) {
+            // 新しいPressStart/End方式に移行したため未使用ですが、エラー防止のため残しています
         },
 
         switchMode(mode) {
@@ -284,7 +271,6 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
-        // 1. 押した瞬間の判定 (単発ノーツ、またはロングノーツの始点)
         judgeOnPress(lane, currentTime) {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             
@@ -297,7 +283,6 @@ if (typeof window.GameCore === 'undefined') {
             const rating = this.calculateRating(targetNote.time, currentTime);
             targetNote.judged = true;
 
-            // 始点がMISSじゃなければ、このレーンのロング判定用ホールドフラグをONにする
             if (rating !== 'MISS') {
                 const hasEndNote = window.GameAudio.notesData.some(n => n.lane === lane && n.type === 'slide' && n.time > targetNote.time && !n.judged);
                 if (hasEndNote) {
@@ -311,21 +296,18 @@ if (typeof window.GameCore === 'undefined') {
             this.displayJudgment(rating, this.getRatingClass(rating));
         },
 
-        // 2. 離した瞬間の判定 (ロングノーツの終点チェック)
         judgeOnRelease(lane, currentTime) {
             const pairs = this.getLongNotePairs();
             
-            // 現在のレーンで、現在ホールド中かつ終点が未判定のロングノーツを探す
             const activePair = pairs.find(pair => 
                 pair.start.lane === lane && pair.start.holdStarted && !pair.end.judged
             );
 
             if (!activePair) return;
 
-            // 終点ノーツの目標時間と、今離した時間の差分で判定
             const rating = this.calculateRating(activePair.end.time, currentTime);
             activePair.end.judged = true;
-            activePair.start.holdStarted = false; // ホールド終了
+            activePair.start.holdStarted = false; 
 
             if (rating !== 'MISS') {
                 this.combo++;
@@ -336,7 +318,6 @@ if (typeof window.GameCore === 'undefined') {
             this.displayJudgment(rating, this.getRatingClass(rating));
         },
 
-        // 共通：時間差から判定文字を返す
         calculateRating(targetTime, currentTime) {
             const diff = Math.abs(targetTime - currentTime);
             if (diff <= this.judgments.perfect) return 'PERFECT';
@@ -368,6 +349,7 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
+        // ペア判定ロジック（録音モードの「時間更新前」でもペアとして認識できるように修正）
         getLongNotePairs() {
             if (!window.GameAudio || !window.GameAudio.notesData) return [];
             const pairs = [];
@@ -375,9 +357,12 @@ if (typeof window.GameCore === 'undefined') {
 
             for (let i = 0; i < notes.length; i++) {
                 if (notes[i].type === 'tap') {
+                    // 同じレーンで、始点以降にある一番近い slide ノーツを探索
                     const endNote = notes.find((n, idx) => idx > i && n.lane === notes[i].lane && n.type === 'slide');
                     if (endNote) {
-                        if (endNote.time - notes[i].time >= 450) {
+                        // ★修正：録音中（同じ時間＝差分0）または、すでに確定したロング（差分450ms以上）をペアとして認める
+                        const timeDiff = endNote.time - notes[i].time;
+                        if (timeDiff === 0 || timeDiff >= 450) {
                             pairs.push({ start: notes[i], end: endNote });
                         }
                     }
@@ -398,17 +383,14 @@ if (typeof window.GameCore === 'undefined') {
             requestAnimationFrame(loop);
         },
 
-        // 道中の押しっぱなし状況と、終点を超えた際の見逃しをリアルタイム監視
         checkLiveHoldNotes() {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             const currentTime = window.GameAudio.getCurrentTimeMs();
             const pairs = this.getLongNotePairs();
 
             pairs.forEach(pair => {
-                // 1. 道中（始点通過後〜終点手前まで）でキーを離していないかチェック
                 if (currentTime > pair.start.time && currentTime < pair.end.time - this.judgments.miss) {
                     if (pair.start.holdStarted && !pair.end.judged) {
-                        // 途中で離してしまった場合は即MISS
                         if (!this.isKeyHolding[pair.start.lane]) {
                             pair.start.holdStarted = false;
                             pair.end.judged = true;
@@ -418,7 +400,6 @@ if (typeof window.GameCore === 'undefined') {
                     }
                 }
 
-                // 2. 離さないまま終点を完全に通り過ぎてしまった（押しすぎ）場合のMISS判定
                 if (currentTime > pair.end.time + this.judgments.miss && !pair.end.judged) {
                     pair.end.judged = true;
                     pair.start.holdStarted = false;
@@ -440,7 +421,6 @@ if (typeof window.GameCore === 'undefined') {
             const laneHeight = lanesContainer.clientHeight;
             const targetY = laneHeight * 0.85; 
 
-            // 1. スライドの「帯（ロング中間）」
             const pairs = this.getLongNotePairs();
             pairs.forEach(pair => {
                 if (pair.end.judged) return; 
@@ -479,7 +459,6 @@ if (typeof window.GameCore === 'undefined') {
                 }
             });
 
-            // 2. 頭ノーツ（始点・単発）
             window.GameAudio.notesData.forEach(note => {
                 if (note.judged) return;
 
@@ -499,7 +478,6 @@ if (typeof window.GameCore === 'undefined') {
             });
         },
 
-        // 見逃しMISS判定（主に単発単体のチェック）
         checkMissedNotes() {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             const currentTime = window.GameAudio.getCurrentTimeMs();
@@ -517,7 +495,6 @@ if (typeof window.GameCore === 'undefined') {
     window.GameCore.init();
 }
 
-// 調整タイムラインモジュール
 if (typeof window.GameVisuals === 'undefined') {
     window.GameVisuals = {
         updateTimeline() {
