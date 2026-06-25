@@ -84,8 +84,10 @@ if (typeof window.GameCore === 'undefined') {
                 laneEl.addEventListener(startEvent, (e) => {
                     if (!this.isBgVisible) return;
                     e.preventDefault();
-                    this.isKeyHolding[i] = true;
-                    this.handlePressStart(i);
+                    if (!this.isKeyHolding[i]) {
+                        this.isKeyHolding[i] = true;
+                        this.handlePressStart(i);
+                    }
                 });
                 laneEl.addEventListener(endEvent, (e) => {
                     if (!this.isBgVisible) return;
@@ -144,7 +146,7 @@ if (typeof window.GameCore === 'undefined') {
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
-            // ★プロセカ風エフェクト調整：HTMLの構造に合わせ、zoneがある場合はそこを、無い場合はレーン自体を光らせます
+            // ★エフェクト追加：押している間ずっとクラスを維持します
             if (laneEl) {
                 const effectZone = laneEl.querySelector('.lane-effect-zone');
                 if (effectZone) {
@@ -185,7 +187,7 @@ if (typeof window.GameCore === 'undefined') {
         // 【離した瞬間】の処理
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
-            // ★レーン全体およびエフェクトゾーンから発光クラスを完全に消去
+            // ★エフェクト解除：離した瞬間に綺麗に消去します
             if (laneEl) {
                 laneEl.classList.remove('active-tap', 'active-slide');
                 const effectZone = laneEl.querySelector('.lane-effect-zone');
@@ -232,7 +234,6 @@ if (typeof window.GameCore === 'undefined') {
         },
 
         recordEvaluatedNote(lane, targetTime, type) {
-            // エラー防止用空関数
         },
 
         switchMode(mode) {
