@@ -205,6 +205,24 @@ button.active {
     box-shadow: 0 0 14px #ffee00, inset 0 0 4px #fff;
 }
 
+/* 押した瞬間の一瞬のフラッシュ（従来のactive-tapの役割） */
+.lane-flashing {
+    animation: tapFlash 0.15s ease-out;
+}
+
+/* ★押しっぱなしの間、ずっとレーンの底を光らせる（スライド用） */
+.active-hold::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 30%; /* レーンの下部30%を光らせる */
+    background: linear-gradient(to top, rgba(0, 255, 200, 0.4), transparent);
+    box-shadow: 0 -10px 20px rgba(0, 255, 200, 0.3);
+    pointer-events: none;
+}
+
 /* ロングノーツの「繋ぎの帯」 */
 .long-note-body {
     position: absolute;
