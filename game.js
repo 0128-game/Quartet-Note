@@ -4,7 +4,7 @@ if (typeof window.GameCore === 'undefined') {
         score: 0,
         combo: 0,
         maxCombo: 0,
-        life: 1000, // ★プロセカ仕様の初期ライフ
+        life: 1000, // プロセカ仕様の初期ライフ
         maxLife: 1000,
         noteSpeedMs: 1000, 
         
@@ -24,17 +24,20 @@ if (typeof window.GameCore === 'undefined') {
         // プレイヤー位置フラグ (true=背景、false=前面)
         isBgVisible: true, 
 
+        // 録音中（ホールド中）のノーツを各レーンごとに記憶する一時バッファ
+        recordingNotes: { 0: null, 1: null, 2: null, 3: null },
+
         init() {
             this.setupEventListeners();
             this.setupBridge();
             this.startGameLoop();
         },
 
-        // audio.js からのコールバックを受けるためのブリッジを構築
+        // audio.js 等と安全に同期するためのブリッジインターフェース
         setupBridge() {
             window.GameManager = {
                 onPlayerStateChange: (state) => {
-                    // 必要に応じて再生・停止時のゲーム側処理をここに記述
+                    // オーディオ再生状態の変更通知用
                 },
                 loadChart: (notes) => {
                     this.resetLive();
@@ -153,33 +156,56 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
-// 【押した瞬間】の処理（修正版）
+        // 【押した瞬間】の処理
         handlePressStart(lane) {
             const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
             if (laneEl) {
-                // 1. 一瞬だけ光るタップエフェクト（クラスをリセットして再発火）
+                // アニメーション用フラッシュクラスと、長押し中クラスの制御
                 laneEl.classList.remove('lane-flashing');
                 void laneEl.offsetWidth; // 強制リフロー
                 laneEl.classList.add('lane-flashing');
-
-                // 2. 押しっぱなし用のクラスを付与（離すまで維持！）
                 laneEl.classList.add('active-hold');
             }
 
-            // プレイモード：押した瞬間の判定
-            if (this.currentMode === 'play') {
+            // 【録音モード】押した瞬間に始点と仮の終点を同時作成
+            if (this.currentMode === 'record') {
+                if (window.GameAudio && window.GameAudio.isRecording) {
+                    const startNote = {
+                        time: currentTime,
+                        lane: lane,
+                        type: 'tap',
+                        judged: false
+                    };
+                    
+                    const endNote = {
+                        time: currentTime, // 離した瞬間に更新予定
+                        lane: lane,
+                        type: 'slide',
+                        judged: false
+                    };
+
+                    window.GameAudio.notesData.push(startNote);
+                    window.GameAudio.notesData.push(endNote);
+
+                    // 離した瞬間に判定・操作するため参照をキープ
+                    this.recordingNotes[lane] = { start: startNote, end: endNote };
+                    
+                    this.sortAndRefreshTimeline();
+                }
+            } 
+            // 【プレイモード】
+            else if (this.currentMode === 'play') {
                 this.judgeOnPress(lane, currentTime);
             }
         },
 
-        // 【離した瞬間】の処理（修正版）
+        // 【離した瞬間】の処理
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
             if (laneEl) {
-                // 離したので押しっぱなしクラスを解除
                 laneEl.classList.remove('active-hold');
             }
 
@@ -187,44 +213,39 @@ if (typeof window.GameCore === 'undefined') {
 
             const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
 
+            // 【録音モード】0.5秒のホールド時間を閾値としてタップかスライドかを確定
             if (this.currentMode === 'record') {
-                // 【録音モード】
-                const startTime = this.pressTimestamps[lane];
-                const duration = currentTime - startTime;
+                const session = this.recordingNotes[lane];
+                
+                if (session) {
+                    const duration = currentTime - session.start.time;
 
-                if (duration >= 500) {
-                    this.recordEvaluatedNote(lane, startTime, 'tap');
-                    this.recordEvaluatedNote(lane, currentTime, 'slide');
-                } else {
-                    this.recordEvaluatedNote(lane, startTime, 'tap');
+                    if (duration < 500) {
+                        // 0.5秒未満ならタップ扱い。不要な仮の終点(slide)を削除
+                        window.GameAudio.notesData = window.GameAudio.notesData.filter(note => note !== session.end);
+                    } else {
+                        // 0.5秒以上ならスライド（ロングノーツ）確定。終点時間を現時刻に更新
+                        session.end.time = currentTime;
+                    }
+
+                    this.sortAndRefreshTimeline();
+                    this.recordingNotes[lane] = null; // セッション終了
                 }
-            } else if (this.currentMode === 'play') {
-                // 【プレイモード】終点判定
+            } 
+            // 【プレイモード】離した瞬間の終点判定
+            else if (this.currentMode === 'play') {
                 this.judgeOnRelease(lane, currentTime);
             }
 
             this.pressTimestamps[lane] = null;
         },
 
-        recordEvaluatedNote(lane, targetTime, type) {
-            if (!window.GameAudio || !window.GameAudio.isRecording) return;
-
-            const isDuplicate = window.GameAudio.notesData.some(note => 
-                note.lane === lane && Math.abs(note.time - targetTime) < 50
-            );
-
-            if (!isDuplicate) {
-                window.GameAudio.notesData.push({
-                    time: targetTime,
-                    lane: lane,
-                    type: type,
-                    judged: false
-                });
+        sortAndRefreshTimeline() {
+            if (window.GameAudio && window.GameAudio.notesData) {
                 window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-                
-                if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
-                    window.GameVisuals.updateTimeline();
-                }
+            }
+            if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
+                window.GameVisuals.updateTimeline();
             }
         },
 
@@ -236,7 +257,6 @@ if (typeof window.GameCore === 'undefined') {
             document.getElementById('btn-mode-edit').classList.remove('active');
             document.getElementById('editor-panel').classList.add('hidden');
             
-            // 判定とコンボの中央グループ全体を出し入れ
             const judgmentCenter = document.getElementById('judgment-center');
             if (judgmentCenter) judgmentCenter.classList.add('hidden');
             
@@ -249,7 +269,7 @@ if (typeof window.GameCore === 'undefined') {
             } else if (mode === 'record') {
                 document.getElementById('btn-mode-record').classList.add('active');
                 if (window.GameAudio) window.GameAudio.isRecording = true;
-                alert('録音モード: スペースキーで再生。長押しでスライドノーツが作成されます。');
+                alert('録音モード: スペースキーで再生。長押しすると自動的にスライドノーツになります。');
             } else if (mode === 'edit') {
                 document.getElementById('btn-mode-edit').classList.add('active');
                 document.getElementById('editor-panel').classList.remove('hidden');
@@ -275,7 +295,6 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
-        // スコア・ライフ・コンボのDOM出力を一括で更新
         updateUiDisplays() {
             const scoreEl = document.getElementById('score-display');
             if (scoreEl) {
@@ -292,7 +311,6 @@ if (typeof window.GameCore === 'undefined') {
                 const percentage = Math.max(0, (this.life / this.maxLife) * 100);
                 lifeBar.style.width = `${percentage}%`;
                 
-                // ライフ危険域で色を変える演出
                 if (percentage < 30) {
                     lifeBar.style.background = 'linear-gradient(to right, #ff0055, #ff0000)';
                     lifeBar.style.boxShadow = '0 0 8px #ff0000';
@@ -340,14 +358,12 @@ if (typeof window.GameCore === 'undefined') {
 
             const rating = this.calculateRating(activePair.end.time, currentTime);
             activePair.end.judged = true;
-            activePair.start.holdStarted = false; // ホールド終了
+            activePair.start.holdStarted = false; 
 
             this.processRatingEffect(rating);
-
             this.displayJudgment(rating, this.getRatingClass(rating));
         },
 
-        // 判定に応じたスコア加算とライフの増減処理
         processRatingEffect(rating) {
             if (rating === 'PERFECT') {
                 this.score += 1000;
@@ -359,10 +375,10 @@ if (typeof window.GameCore === 'undefined') {
                 this.life = Math.min(this.maxLife, this.life + 5);
             } else if (rating === 'GOOD') {
                 this.score += 500;
-                this.combo++; // プロセカはGOODでもコンボが継続します
+                this.combo++; 
             } else if (rating === 'MISS') {
                 this.combo = 0;
-                this.life = Math.max(0, this.life - 100); // MISSでライフ大幅減少
+                this.life = Math.max(0, this.life - 100); 
             }
             this.updateUiDisplays();
         },
@@ -388,7 +404,6 @@ if (typeof window.GameCore === 'undefined') {
                 display.textContent = text;
                 display.className = className;
                 
-                // アニメーションのリトリガー
                 display.style.animation = 'none';
                 void display.offsetWidth; 
                 display.style.animation = 'judgmentPop 0.08s ease-out';
@@ -463,7 +478,7 @@ if (typeof window.GameCore === 'undefined') {
             const laneHeight = lanesContainer.clientHeight;
             const targetY = laneHeight * 0.85; 
 
-            // 1. スライドの「帯（ロング中間）」
+            // 1. スライドノーツの「帯」を描画
             const pairs = this.getLongNotePairs();
             pairs.forEach(pair => {
                 if (pair.end.judged) return; 
@@ -500,7 +515,7 @@ if (typeof window.GameCore === 'undefined') {
                 }
             });
 
-            // 2. 頭ノーツ（始点・単発）
+            // 2. 頭ノーツ（始点および単発タップ）を描画
             window.GameAudio.notesData.forEach(note => {
                 if (note.judged) return;
 
