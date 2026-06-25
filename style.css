@@ -355,3 +355,22 @@ button.active {
     background: linear-gradient(to top, rgba(0, 255, 200, 0.4), transparent) !important;
     box-shadow: 0 0 20px rgba(0, 255, 200, 0.8) !important;
 }
+/* ーーー 長押しエフェクトのCSS ーーー */
+
+/* 1. レーン自体、またはエフェクトゾーンに active-hold がついた時 */
+.lane-effect-zone.active-hold,
+.lane-container.active-hold,
+[id^="lane-"].active-hold {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* プロセカ風の、下から上に伸びる光のグラデーション */
+    background: linear-gradient(to top, rgba(0, 255, 238, 0.45) 0%, rgba(0, 255, 238, 0.1) 70%, transparent 100%) !important;
+    /* 判定ライン付近を強く光らせる */
+    box-shadow: inset 0 -15px 25px rgba(0, 255, 238, 0.6), 0 0 15px rgba(0, 255, 238, 0.5) !important;
+}
+
+/* 2. もし既存のCSSで元々のアニメーションが邪魔をしている場合の強制上書き */
+.lane-effect-zone.active-hold {
+    animation: none !important; /* 一瞬で消えるアニメーションを無効化 */
+}
