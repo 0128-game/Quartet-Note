@@ -2,11 +2,18 @@ if (typeof window.GameAudio === 'undefined') {
     window.GameAudio = {
         player: null,
         isApiReady: false,
-        currentVideoId: 'yv_2yE6jHcw', 
+        currentVideoId: 'eWBjxT54RQA', 
         isRecording: false,
         notesData: [], 
 
-        init() {
+        // ★ここに楽曲情報（メタデータ）の初期構造を追加しました！
+        metaData: {
+            title: "",
+            author: "",
+            difficultyType: "MASTER", // 前回のHTMLに合わせて初期値をMASTERにしています
+            difficultyLevel: "30",   // 前回のHTMLに合わせて初期値を30にしています
+            comment: ""
+        },        init() {
             // YouTube IFrame APIのバインド強化
             if (window.YT && window.YT.Player) {
                 this.isApiReady = true;
