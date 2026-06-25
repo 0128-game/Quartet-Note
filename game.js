@@ -146,13 +146,13 @@ if (typeof window.GameCore === 'undefined') {
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
-            // ★エフェクト追加：押している間ずっとクラスを維持します
+            // ★エフェクト改良：単発用の 'active-tap' だけでなく、維持用の 'active-hold' を付与
             if (laneEl) {
                 const effectZone = laneEl.querySelector('.lane-effect-zone');
                 if (effectZone) {
-                    effectZone.classList.add('active-tap');
+                    effectZone.classList.add('active-tap', 'active-hold');
                 } else {
-                    laneEl.classList.add('active-tap');
+                    laneEl.classList.add('active-tap', 'active-hold');
                 }
             }
 
@@ -187,12 +187,12 @@ if (typeof window.GameCore === 'undefined') {
         // 【離した瞬間】の処理
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
-            // ★エフェクト解除：離した瞬間に綺麗に消去します
+            // ★エフェクト解除：すべての発光状態・ホールド状態のクラスを完全に消去
             if (laneEl) {
-                laneEl.classList.remove('active-tap', 'active-slide');
+                laneEl.classList.remove('active-tap', 'active-slide', 'active-hold');
                 const effectZone = laneEl.querySelector('.lane-effect-zone');
                 if (effectZone) {
-                    effectZone.classList.remove('active-tap', 'active-slide');
+                    effectZone.classList.remove('active-tap', 'active-slide', 'active-hold');
                 }
             }
 
