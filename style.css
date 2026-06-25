@@ -1,91 +1,104 @@
-/* ==========================================
-   全体の基本レイアウト・リセット
-   ========================================== */
+/* ==========================================================================
+   1. 全体設定 & リセット
+   ========================================================================== */
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 body {
+    background-color: #0d1117;
+    color: #c9d1d9;
     font-family: 'Helvetica Neue', Arial, sans-serif;
-    background-color: #0d0f1d;
-    color: #fff;
     overflow: hidden;
-    user-select: none;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
+/* アプリ全体のコンテナ（画面中央にぴったり配置） */
 #app-container {
+    position: relative;
+    width: 380px;
+    height: 680px;
+    background-color: #0a0e1a;
+    border: 3px solid #30363d;
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    width: 100vw;
+    overflow: hidden;
 }
 
-/* ==========================================
-   上部：コントロールパネル
-   ========================================== */
+/* ==========================================================================
+   2. ヘッダー（コントロールパネル）
+   ========================================================================== */
 #control-panel {
+    background-color: #161b22;
+    border-bottom: 2px solid #30363d;
+    padding: 8px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #1a1d33;
-    padding: 10px 20px;
-    border-bottom: 2px solid #2a2e45;
+    flex-direction: column;
+    gap: 6px;
     z-index: 30;
 }
 
 .panel-section {
     display: flex;
-    gap: 10px;
-    align-items: center;
+    gap: 4px;
+    width: 100%;
 }
 
-input[type="text"] {
-    background-color: #0b0c16;
-    border: 1px solid #444;
-    color: #fff;
-    padding: 6px 12px;
+/* URL入力欄 */
+#youtube-url {
+    flex: 1;
+    padding: 6px 8px;
+    background-color: #0d1117;
+    border: 1px solid #30363d;
     border-radius: 4px;
-    width: 250px;
+    color: #fff;
+    font-size: 11px;
 }
 
 button {
-    background-color: #2e3456;
-    border: none;
-    color: #fff;
-    padding: 6px 14px;
+    flex: 1;
+    padding: 6px 4px;
+    background-color: #21262d;
+    border: 1px solid #30363d;
     border-radius: 4px;
-    cursor: pointer;
+    color: #c9d1d9;
+    font-size: 11px;
     font-weight: bold;
-    transition: all 0.2s;
+    cursor: pointer;
+    transition: background-color 0.15s;
 }
 
 button:hover {
-    background-color: #3e4675;
+    background-color: #30363d;
 }
 
 button.active {
-    background-color: #00ffff;
-    color: #000;
-    box-shadow: 0 0 10px #00ffff;
+    background-color: #1f6feb;
+    border-color: #388bfd;
+    color: #ffffff;
 }
 
-/* ==========================================
-   中央：メインゲームエリア
-   ========================================== */
+/* ==========================================================================
+   3. メインゲームエリア（レイアウトの核心）
+   ========================================================================== */
 #game-area {
-    flex: 1;
     position: relative;
     width: 100%;
-    background-color: #05050a;
-    display: flex;
-    justify-content: center;
-    /* ★奥から手前への立体感を出すための設定 */
-    perspective: 400px;
+    flex: 1;               /* ヘッダーとフッター以外の縦幅をすべて使用 */
+    background-color: #070a14;
     overflow: hidden;
 }
 
+/* YouTube動画コンテナ */
 #video-container {
     position: absolute;
     top: 0;
@@ -93,9 +106,9 @@ button.active {
     width: 100%;
     height: 100%;
     z-index: 1;
-    opacity: 0.25;
     pointer-events: none;
-    transition: opacity 0.3s, z-index 0.1s;
+    opacity: 0.25;
+    transition: opacity 0.3s ease, z-index 0.3s ease;
 }
 
 #youtube-player {
@@ -103,142 +116,105 @@ button.active {
     height: 100%;
 }
 
-/* 音ゲーのレーン全体 */
+/* 4本のゲームレーンを包むコンテナ */
 #game-lanes {
-    position: relative;
-    width: 460px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
     height: 100%;
-    background-color: rgba(16, 18, 35, 0.65);
-    border-left: 3px solid #00ffff;
-    border-right: 3px solid #00ffff;
-    display: flex;
-    z-index: 2;
-    /* ★プロセカ風にレーンを奥に傾ける（3D効果） */
-    transform: rotateX(20deg);
-    transform-origin: bottom center;
-    box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+    display: flex;         /* レーンを絶対に横並び（row）にする */
+    flex-direction: row;
+    z-index: 5;
+    background: linear-gradient(to bottom, rgba(7, 10, 20, 0.4), rgba(15, 21, 38, 0.6));
 }
 
-/* 各レーン */
+/* 各レーン（完全に4等分） */
 .lane {
-    flex: 1;
     position: relative;
     height: 100%;
-    border-right: 1px solid rgba(0, 255, 255, 0.15);
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
+    flex: 1;               /* 25%ずつに均等割 */
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
 }
 
 .lane:last-child {
     border-right: none;
 }
 
-/* キー操作のガイド文字 */
+/* ★ レーンを叩いたときのシンプル発光（下から上へじわっと光る） */
+.lane.active-tap {
+    background: linear-gradient(to top, 
+        rgba(0, 255, 255, 0.35) 0%,   /* 判定ライン付近は明るく */
+        rgba(0, 255, 255, 0.08) 40%,  /* 中間は薄く */
+        rgba(0, 255, 255, 0) 100%     /* 上部は完全に透明 */
+    );
+    box-shadow: inset 0 -15px 25px rgba(0, 255, 255, 0.15);
+}
+
+/* キーガイド（D, F, J, K）の文字位置調整 */
 .lane-key-guide {
-    margin-bottom: 25px;
-    font-size: 20px;
-    font-weight: bold;
-    color: rgba(255, 255, 255, 0.4);
-    text-shadow: 0 0 5px rgba(0,0,0,0.8);
-    z-index: 10;
-}
-
-/* ★レーン個別のタップエフェクトゾーン（裏で常駐） */
-.lane-effect-zone {
     position: absolute;
-    bottom: 15%;
-    left: 0;
+    bottom: 5%;
     width: 100%;
-    height: 0%;
-    background: linear-gradient(to top, rgba(0, 255, 255, 0.6), rgba(0, 255, 255, 0));
-    opacity: 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    font-weight: bold;
     pointer-events: none;
-    z-index: 3;
 }
 
-/* タップされた時にJSからこのクラスを付与してアニメーションさせる */
-.lane.active-tap .lane-effect-zone {
-    animation: tapFlash 0.15s ease-out;
-}
-
-@keyframes tapFlash {
-    0% { height: 40%; opacity: 1; }
-    100% { height: 100%; opacity: 0; }
-}
-
-/* ==========================================
-   判定ライン・ノーツ・ロングノーツ
-   ========================================== */
+/* 判定ライン（HTMLの id="judgment-line" に準拠。targetY=85%の位置） */
 #judgment-line {
     position: absolute;
-    bottom: 15%;
+    top: 85%;
     left: 0;
     width: 100%;
-    height: 6px;
-    background: linear-gradient(to right, #ff007f, #ffffff, #ff007f);
-    box-shadow: 0 0 15px #ff007f, 0 0 5px #fff;
-    z-index: 4;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 15px rgba(0, 255, 255, 0.4);
     pointer-events: none;
-}
-
-/* 通常のノーツ */
-.note {
-    position: absolute;
-    width: 96%;
-    left: 2%;
-    height: 14px;
-    border-radius: 7px;
-    transform: translateY(-50%);
     z-index: 6;
 }
 
-/* 単発・始点ノーツ（水色） */
-.note-tap {
-    background: linear-gradient(to right, #00ffff, #ffffff, #00ffff);
-    box-shadow: 0 0 14px #00ffff, inset 0 0 4px #fff;
-}
-
-/* スライド終点ノーツ（黄色） */
-.note-slide {
-    background: linear-gradient(to right, #ffee00, #ffffff, #ffee00);
-    box-shadow: 0 0 14px #ffee00, inset 0 0 4px #fff;
-}
-
-/* 押した瞬間の一瞬のフラッシュ（従来のactive-tapの役割） */
-.lane-flashing {
-    animation: tapFlash 0.15s ease-out;
-}
-
-/* ★押しっぱなしの間、ずっとレーンの底を光らせる（スライド用） */
-.active-hold::after {
-    content: '';
+/* ==========================================================================
+   4. ノーツ（音符）の描画設定
+   ========================================================================== */
+.note {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 30%; /* レーンの下部30%を光らせる */
-    background: linear-gradient(to top, rgba(0, 255, 200, 0.4), transparent);
-    box-shadow: 0 -10px 20px rgba(0, 255, 200, 0.3);
-    pointer-events: none;
+    width: 90%;            /* レーンの横幅に対して少し隙間を空けて綺麗に見せる */
+    left: 5%;              /* 中央寄せ */
+    height: 14px;
+    border-radius: 4px;
+    transform: translateY(-50%);
+    z-index: 10;
+    border: 1px solid #ffffff;
 }
 
-/* ロングノーツの「繋ぎの帯」 */
+/* 通常タップ（青） */
+.note-tap {
+    background: linear-gradient(to right, #00ffff, #0077ff);
+    box-shadow: 0 0 8px rgba(0, 255, 255, 0.7);
+}
+
+/* スライド終点（黄） */
+.note-slide {
+    background: linear-gradient(to right, #ffea00, #ff9900);
+    box-shadow: 0 0 8px rgba(255, 234, 0, 0.7);
+}
+
+/* ロングノーツの帯 */
 .long-note-body {
     position: absolute;
-    width: 100%;
-    left: 0;
-    z-index: 5;
-    background: linear-gradient(to bottom, rgba(0, 255, 180, 0.5), rgba(0, 150, 255, 0.5));
-    border-left: 3px solid #00ffff;
-    border-right: 3px solid #00ffff;
+    width: 58%;
+    left: 21%;
+    z-index: 8;
     pointer-events: none;
-    box-shadow: inset 0 0 10px rgba(0,255,255,0.3);
 }
 
-/* ==========================================
-   UIオーバーレイ（プロセカ風スコア・ライフ・判定）
-   ========================================== */
+/* ==========================================================================
+   5. UIオーバーレイ（スコア・コンボ・判定文字）
+   ========================================================================== */
 #ui-overlay {
     position: absolute;
     top: 0;
@@ -246,104 +222,109 @@ button.active {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 15;
-}
-
-/* スコアとライフバーの配置 */
-#status-display {
-    position: absolute;
-    top: 20px;
-    right: 30px;
+    z-index: 20;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 5px;
+}
+
+/* スコア & ライフバー */
+#status-display {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 #score-display {
-    font-size: 22px;
+    font-size: 14px;
     font-weight: bold;
+    color: #ffffff;
     font-family: monospace;
-    color: #00ffff;
-    text-shadow: 0 0 6px rgba(0, 255, 255, 0.5);
 }
 
 #life-bar-container {
-    width: 180px;
-    height: 8px;
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    width: 50%;
+    height: 6px;
+    background-color: #21262d;
+    border-radius: 3px;
     overflow: hidden;
 }
 
 #life-bar {
-    width: 100%; /* 初期値は満タン */
+    width: 100%; /* 初期状態マックス */
     height: 100%;
-    background: linear-gradient(to right, #00ffaa, #00ff55);
-    box-shadow: 0 0 8px #00ff55;
-    transition: width 0.1s ease;
+    background-color: #238636; /* 緑色 */
 }
 
-/* 判定とコンボ（画面中央付近にまとめて配置） */
+/* 画面中央の判定表示領域 */
 #judgment-center {
-    position: absolute;
-    top: 35%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-}
-
-#combo-display {
-    font-size: 36px;
-    font-weight: 900;
-    color: #fff;
-    text-shadow: 0 0 10px rgba(255,255,255,0.8);
-    font-style: italic;
-    line-height: 1;
+    margin-auto: 0;
+    margin-top: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
 }
 
 #judgment-display {
-    font-size: 42px;
+    font-size: 32px;
     font-weight: 900;
     font-style: italic;
-    letter-spacing: 3px;
-    text-shadow: 0 0 12px currentColor;
-    margin-top: 5px;
-    animation: judgmentPop 0.08s ease-out;
+    height: 38px;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+    transition: transform 0.05s ease-out;
 }
 
-@keyframes judgmentPop {
-    0% { transform: scale(0.85); }
-    100% { transform: scale(1); }
+.jd-perfect { color: #ffea00; text-shadow: 0 0 10px rgba(255, 234, 0, 0.6); }
+.jd-great   { color: #ff00ff; text-shadow: 0 0 10px rgba(255, 0, 255, 0.6); }
+.jd-good    { color: #00ffcc; text-shadow: 0 0 10px rgba(0, 255, 204, 0.6); }
+.jd-miss    { color: #ff3333; text-shadow: 0 0 10px rgba(255, 51, 51, 0.6); }
+
+#combo-display {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
 }
 
-.jd-perfect { color: #ffee00; }
-.jd-great   { color: #ff00ff; }
-.jd-good    { color: #00ffff; }
-.jd-miss    { color: #888888; }
-
-.hidden {
-    display: none !important;
-}
-
-/* ==========================================
-   下部：エディタパネル
-   ========================================== */
+/* ==========================================================================
+   6. フッター（エディターパネル）
+   ========================================================================== */
 #editor-panel {
-    background-color: #111322;
-    border-top: 2px solid #2a2e45;
-    padding: 15px;
-    height: 180px;
+    background-color: #161b22;
+    border-top: 2px solid #30363d;
+    padding: 8px;
     z-index: 30;
+    max-height: 140px;
 }
 
 #editor-panel h3 {
-    font-size: 14px;
-    color: #8b92b5;
-    margin-bottom: 10px;
+    font-size: 11px;
+    color: #8b949e;
+    margin-bottom: 4px;
 }
 
 #timeline-container {
     width: 100%;
     overflow-x: auto;
+    background-color: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    min-height: 70px;
+}
+
+/* スクロールバーの調整 */
+#timeline-container::-webkit-scrollbar {
+    height: 6px;
+}
+#timeline-container::-webkit-scrollbar-thumb {
+    background: #30363d;
+    border-radius: 3px;
+}
+
+/* ==========================================================================
+   7. 共通設定
+   ========================================================================== */
+.hidden {
+    display: none !important;
 }
