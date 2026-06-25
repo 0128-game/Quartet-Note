@@ -22,11 +22,35 @@
 
             <div class="panel-section">
                 <button id="btn-toggle-bg">プレイヤー: 背景</button>
+                <button id="btn-edit-meta">譜面情報を編集</button>
                 <button id="btn-export">譜面をエクスポート</button>
                 <input type="file" id="file-import" accept=".json" style="display: none;">
                 <button id="btn-import-trigger" onclick="document.getElementById('file-import').click()">譜面をインポート</button>
             </div>
         </header>
+        <div id="meta-dialog" class="hidden-dialog">
+    <div class="dialog-content">
+        <h2>楽曲・譜面情報</h2>
+        <div class="dialog-body">
+            <label>楽曲タイトル: <input type="text" id="meta-title" placeholder="（例）Neoっぽいやつ"></label>
+            <label>作者名（譜面制作者）: <input type="text" id="meta-author" placeholder="（例）初音ミク"></label>
+            <label>難易度タイプ: 
+                <select id="meta-difficulty-type">
+                    <option value="EASY">EASY</option>
+                    <option value="NORMAL">NORMAL</option>
+                    <option value="HARD">HARD</option>
+                    <option value="EXPERT">EXPERT</option>
+                    <option value="MASTER" selected>MASTER</option>
+                    <option value="APPEND">APPEND</option> </select>
+            </label>
+            <label>難易度レベル (1〜46): <input type="number" id="meta-difficulty-level" min="1" max="46" value="30"></label>
+            <label>コメント: <textarea id="meta-comment" placeholder="譜面の解説や意気込みなどをどうぞ！"></textarea></label>
+        </div>
+        <div class="dialog-footer">
+            <button id="btn-dialog-close">閉じてゲームへ</button>
+        </div>
+    </div>
+</div>
 
         <main id="game-area">
             <div id="video-container">
