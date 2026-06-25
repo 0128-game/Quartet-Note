@@ -177,23 +177,37 @@ setupEventListeners() {
         },
 
         // ★ 新規追加: メタデータを含めた新しいエクスポート処理
+// メタデータを含めた新しいエクスポート処理（強化版）
         exportChartWithMeta() {
-            if (!window.GameAudio) return;
+            // 1. window.GameAudio が存在しない場合はエラーを防ぐために作成
+            if (!window.GameAudio) window.GameAudio = {};
+            if (!window.GameAudio.notesData) window.GameAudio.notesData = [];
+
+            // 2. HTMLの各入力欄から値を取得（要素がない・空っぽの場合は初期値を代入）
+            const titleEl = document.getElementById('meta-title');
+            const authorEl = document.getElementById('meta-author');
+            const typeEl = document.getElementById('meta-difficulty-type');
+            const levelEl = document.getElementById('meta-difficulty-level');
+            const commentEl = document.getElementById('meta-comment');
 
             const meta = {
-                title: document.getElementById('meta-title').value || "無題の楽曲",
-                author: document.getElementById('meta-author').value || "名無し",
-                difficultyType: document.getElementById('meta-difficulty-type').value,
-                difficultyLevel: document.getElementById('meta-difficulty-level').value,
-                comment: document.getElementById('meta-comment').value
+                title: titleEl && titleEl.value ? titleEl.value : "無題の楽曲",
+                author: authorEl && authorEl.value ? authorEl.value : "名無し",
+                difficultyType: typeEl && typeEl.value ? typeEl.value : "MASTER",
+                difficultyLevel: levelEl && levelEl.value ? levelEl.value : "30",
+                comment: commentEl && commentEl.value ? commentEl.value : "未設定"
             };
+
+            // 3. データを確実に GameAudio に保存
             window.GameAudio.metaData = meta;
 
+            // 4. 保存するJSONのパッケージ（meta と notes）を完全に構成
             const outputPackage = {
                 meta: window.GameAudio.metaData,
                 notes: window.GameAudio.notesData
             };
 
+            // 5. JSON文字列に変換してダウンロード
             const jsonStr = JSON.stringify(outputPackage, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -206,6 +220,8 @@ setupEventListeners() {
             a.download = fileName;
             a.click();
             URL.revokeObjectURL(url);
+            
+            console.log("譜面情報を紐づけてエクスポートしました:", outputPackage);
         },
 
         // ★ 新規追加: メタデータに対応した新しいインポート処理
