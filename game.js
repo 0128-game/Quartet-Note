@@ -153,29 +153,35 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
-        // 【押した瞬間】の処理
+// 【押した瞬間】の処理（修正版）
         handlePressStart(lane) {
             const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
             if (laneEl) {
-                // アニメーションクラスを一度外して再付与し、エフェクトを即座にリスタートさせる
-                laneEl.classList.remove('active-tap');
+                // 1. 一瞬だけ光るタップエフェクト（クラスをリセットして再発火）
+                laneEl.classList.remove('lane-flashing');
                 void laneEl.offsetWidth; // 強制リフロー
-                laneEl.classList.add('active-tap');
+                laneEl.classList.add('lane-flashing');
+
+                // 2. 押しっぱなし用のクラスを付与（離すまで維持！）
+                laneEl.classList.add('active-hold');
             }
 
-            // プレイモード：押した瞬間の判定（始点 or 単発）
+            // プレイモード：押した瞬間の判定
             if (this.currentMode === 'play') {
                 this.judgeOnPress(lane, currentTime);
             }
         },
 
-        // 【離した瞬間】の処理
+        // 【離した瞬間】の処理（修正版）
         handlePressEnd(lane) {
             const laneEl = document.getElementById(`lane-${lane}`);
-            if (laneEl) laneEl.classList.remove('active-tap');
+            if (laneEl) {
+                // 離したので押しっぱなしクラスを解除
+                laneEl.classList.remove('active-hold');
+            }
 
             if (this.pressTimestamps[lane] === null) return;
 
@@ -193,7 +199,7 @@ if (typeof window.GameCore === 'undefined') {
                     this.recordEvaluatedNote(lane, startTime, 'tap');
                 }
             } else if (this.currentMode === 'play') {
-                // 【プレイモード】離した瞬間の「終点（離し）判定」を実行
+                // 【プレイモード】終点判定
                 this.judgeOnRelease(lane, currentTime);
             }
 
