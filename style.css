@@ -355,22 +355,32 @@ button.active {
     background: linear-gradient(to top, rgba(0, 255, 200, 0.4), transparent) !important;
     box-shadow: 0 0 20px rgba(0, 255, 200, 0.8) !important;
 }
-/* ーーー 長押しエフェクトのCSS ーーー */
+/* ==========================================
+   修正版：長押しエフェクト（完全に残るよう修正）
+   ========================================== */
 
-/* 1. レーン自体、またはエフェクトゾーンに active-hold がついた時 */
-.lane-effect-zone.active-hold,
-.lane-container.active-hold,
-[id^="lane-"].active-hold {
+/* 1. 押している間、エフェクトゾーン自体の高さと透明度を固定して表示する */
+.lane-effect-zone.active-hold {
     display: block !important;
-    opacity: 1 !important;
     visibility: visible !important;
-    /* プロセカ風の、下から上に伸びる光のグラデーション */
-    background: linear-gradient(to top, rgba(0, 255, 238, 0.45) 0%, rgba(0, 255, 238, 0.1) 70%, transparent 100%) !important;
+    animation: none !important; /* 一瞬で消えるアニメーションを完全に無効化 */
+    
+    /* ★超重要：高さをしっかり100%にして、不透明度をMAXにする */
+    height: 85% !important; 
+    opacity: 1 !important;
+    
+    /* プロセカ風の、判定ラインから上に伸びる光のグラデーション */
+    background: linear-gradient(to top, rgba(0, 255, 238, 0.6) 0%, rgba(0, 255, 238, 0.15) 60%, transparent 100%) !important;
     /* 判定ライン付近を強く光らせる */
-    box-shadow: inset 0 -15px 25px rgba(0, 255, 238, 0.6), 0 0 15px rgba(0, 255, 238, 0.5) !important;
+    box-shadow: inset 0 -20px 30px rgba(0, 255, 238, 0.8), 0 0 20px rgba(0, 255, 238, 0.6) !important;
 }
 
-/* 2. もし既存のCSSで元々のアニメーションが邪魔をしている場合の強制上書き */
-.lane-effect-zone.active-hold {
-    animation: none !important; /* 一瞬で消えるアニメーションを無効化 */
+/* 2. 3D変形によって光が遮られないよう、レーン自体の重ね順を補正 */
+.lane.active-tap {
+    z-index: 10 !important;
+}
+
+/* 3. 元々あった疑似要素(::after)のエフェクトと被って重くならないよう調整 */
+.active-hold::after {
+    display: none !important;
 }
