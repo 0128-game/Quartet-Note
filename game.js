@@ -262,8 +262,20 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
-        resetLive() {
+resetLive() {
             this.combo = 0;
+            this.score = 0;         // スコア初期化
+            this.currentLife = 1000; // ライフ満タン
+            
+            const scoreValEl = document.getElementById('score-val');
+            if (scoreValEl) scoreValEl.textContent = '00000000';
+
+            const lifeBarEl = document.getElementById('life-bar');
+            if (lifeBarEl) {
+                lifeBarEl.style.width = '100%';
+                lifeBarEl.style.background = 'linear-gradient(to right, #00ffaa, #00ff55)';
+            }
+
             document.getElementById('combo-display').textContent = '0 COMBO';
             document.getElementById('judgment-display').textContent = '';
             if (window.GameAudio && window.GameAudio.notesData) {
@@ -273,6 +285,11 @@ if (typeof window.GameCore === 'undefined') {
                 });
             }
         },
+
+// ライフの初期値や最大値を管理するプロパティを上部（judgmentsの近くなど）にない場合は自動で参照します
+        // ここでは最大ライフを 1000 として計算します。
+        currentLife: 1000,
+        maxLife: 1000,
 
         judgeOnPress(lane, currentTime) {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
@@ -285,6 +302,9 @@ if (typeof window.GameCore === 'undefined') {
 
             const rating = this.calculateRating(targetNote.time, currentTime);
             targetNote.judged = true;
+
+            // ★スコアとライフの計算・反映
+            this.updateScoreAndLife(rating);
 
             if (rating !== 'MISS') {
                 const hasEndNote = window.GameAudio.notesData.some(n => n.lane === lane && n.type === 'slide' && n.time > targetNote.time && !n.judged);
@@ -312,6 +332,9 @@ if (typeof window.GameCore === 'undefined') {
             activePair.end.judged = true;
             activePair.start.holdStarted = false; 
 
+            // ★スコアとライフの計算・反映
+            this.updateScoreAndLife(rating);
+
             if (rating !== 'MISS') {
                 this.combo++;
             } else {
@@ -319,6 +342,57 @@ if (typeof window.GameCore === 'undefined') {
             }
 
             this.displayJudgment(rating, this.getRatingClass(rating));
+        },
+
+        // ★新規追加：スコアとライフを計算して画面を書き換える関数
+        updateScoreAndLife(rating) {
+            // 1. 判定ごとのスコア・ライフ増減値の設定
+            let scorePlus = 0;
+            let lifeChange = 0;
+
+            if (rating === 'PERFECT') {
+                scorePlus = 1000;
+                lifeChange = 10; // ライフ回復
+            } else if (rating === 'GREAT') {
+                scorePlus = 750;
+                lifeChange = 5;
+            } else if (rating === 'GOOD') {
+                scorePlus = 500;
+                lifeChange = 0; // GOODはキープ
+            } else if (rating === 'MISS') {
+                scorePlus = 0;
+                lifeChange = -100; // MISSで大幅減少
+            }
+
+            // 2. スコアの加算と表示更新
+            this.score += scorePlus;
+            const scoreValEl = document.getElementById('score-val');
+            if (scoreValEl) {
+                // プロセカ風に8桁のゼロ埋め (例: 00015000) にして表示
+                scoreValEl.textContent = String(this.score).padStart(8, '0');
+            }
+
+            // 3. ライフの計算と制限 (0〜1000の間)
+            if (this.currentLife === undefined) this.currentLife = 1000;
+            this.currentLife += lifeChange;
+            if (this.currentLife > this.maxLife) this.currentLife = this.maxLife;
+            if (this.currentLife < 0) this.currentLife = 0;
+
+            // 4. ライフバー（緑色のバー）の長さを変更
+            const lifeBarEl = document.getElementById('life-bar');
+            if (lifeBarEl) {
+                const lifePercentage = (this.currentLife / this.maxLife) * 100;
+                lifeBarEl.style.width = `${lifePercentage}%`;
+
+                // ライフが少なくなったらバーの色を赤っぽくする演出（お好みで）
+                if (lifePercentage < 30) {
+                    lifeBarEl.style.background = 'linear-gradient(to right, #ff3b30, #ff453a)';
+                    lifeBarEl.style.boxShadow = '0 0 8px #ff453a';
+                } else {
+                    lifeBarEl.style.background = 'linear-gradient(to right, #00ffaa, #00ff55)';
+                    lifeBarEl.style.boxShadow = '0 0 8px #00ff55';
+                }
+            }
         },
 
         calculateRating(targetTime, currentTime) {
@@ -478,7 +552,7 @@ if (typeof window.GameCore === 'undefined') {
             });
         },
 
-        checkMissedNotes() {
+checkMissedNotes() {
             if (!window.GameAudio || !window.GameAudio.notesData) return;
             const currentTime = window.GameAudio.getCurrentTimeMs();
             
@@ -486,6 +560,7 @@ if (typeof window.GameCore === 'undefined') {
                 if (!note.judged && note.type === 'tap' && (currentTime - note.time) > this.judgments.miss) {
                     note.judged = true;
                     this.combo = 0;
+                    this.updateScoreAndLife('MISS'); // ★見逃しMISSでもライフを減らす
                     this.displayJudgment('MISS', 'jd-miss');
                 }
             });
