@@ -347,3 +347,11 @@ button.active {
     width: 100%;
     overflow-x: auto;
 }
+
+/* 長押しされている間、エフェクトの透明度を維持して固定する設定 */
+.lane-effect-zone.active-hold,
+.lane-container.active-hold {
+    opacity: 1 !important;
+    background: linear-gradient(to top, rgba(0, 255, 200, 0.4), transparent) !important;
+    box-shadow: 0 0 20px rgba(0, 255, 200, 0.8) !important;
+}
