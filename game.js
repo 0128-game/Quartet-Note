@@ -176,38 +176,35 @@ setupEventListeners() {
             metaDialog.classList.remove('hidden-dialog');
         },
 
-        // ★ 新規追加: メタデータを含めた新しいエクスポート処理
-// メタデータを含めた新しいエクスポート処理（強化版）
-        exportChartWithMeta() {
-            // 1. window.GameAudio が存在しない場合はエラーを防ぐために作成
+exportChartWithMeta() {
             if (!window.GameAudio) window.GameAudio = {};
             if (!window.GameAudio.notesData) window.GameAudio.notesData = [];
 
-            // 2. HTMLの各入力欄から値を取得（要素がない・空っぽの場合は初期値を代入）
             const titleEl = document.getElementById('meta-title');
             const authorEl = document.getElementById('meta-author');
             const typeEl = document.getElementById('meta-difficulty-type');
             const levelEl = document.getElementById('meta-difficulty-level');
             const commentEl = document.getElementById('meta-comment');
 
+            // ★ window.GameAudio.currentVideoId から現在の動画IDを取得（無ければ初期値）
+            const currentVideoId = window.GameAudio.currentVideoId || 'eWBjxT54RQA';
+
             const meta = {
                 title: titleEl && titleEl.value ? titleEl.value : "無題の楽曲",
                 author: authorEl && authorEl.value ? authorEl.value : "名無し",
                 difficultyType: typeEl && typeEl.value ? typeEl.value : "MASTER",
                 difficultyLevel: levelEl && levelEl.value ? levelEl.value : "30",
-                comment: commentEl && commentEl.value ? commentEl.value : "未設定"
+                comment: commentEl && commentEl.value ? commentEl.value : "",
+                videoId: currentVideoId // ★ ここで動画IDをJSONのmetaに組み込みます！
             };
 
-            // 3. データを確実に GameAudio に保存
             window.GameAudio.metaData = meta;
 
-            // 4. 保存するJSONのパッケージ（meta と notes）を完全に構成
             const outputPackage = {
                 meta: window.GameAudio.metaData,
                 notes: window.GameAudio.notesData
             };
 
-            // 5. JSON文字列に変換してダウンロード
             const jsonStr = JSON.stringify(outputPackage, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -221,11 +218,9 @@ setupEventListeners() {
             a.click();
             URL.revokeObjectURL(url);
             
-            console.log("譜面情報を紐づけてエクスポートしました:", outputPackage);
+            console.log("動画IDを含めてエクスポートしました:", outputPackage);
         },
-
-        // ★ 新規追加: メタデータに対応した新しいインポート処理
-        importChartWithMeta(event) {
+importChartWithMeta(event) {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -237,19 +232,37 @@ setupEventListeners() {
                     if (data.meta && data.notes) {
                         window.GameAudio.metaData = data.meta;
                         window.GameAudio.notesData = data.notes;
+                        
+                        // ★ JSONから動画IDを読み取って、現在の動画IDを上書き
+                        if (data.meta.videoId) {
+                            window.GameAudio.currentVideoId = data.meta.videoId;
+                            
+                            // もしYouTubeプレイヤーの動画を切り替える関数（例: loadVideoById）があればここで呼ぶ
+                            if (window.GameAudio.player && typeof window.GameAudio.player.loadVideoById === 'function') {
+                                window.GameAudio.player.loadVideoById(data.meta.videoId);
+                                // 自動再生されないように一時停止
+                                setTimeout(() => {
+                                    if (window.GameAudio.player.pauseVideo) window.GameAudio.player.pauseVideo();
+                                }, 500);
+                            } else {
+                                // プレイヤーがまだ未生成なら、URL入力欄に自動でIDをセットしておく
+                                const urlInput = document.getElementById('youtube-url');
+                                if (urlInput) urlInput.value = `https://www.youtube.com/watch?v=${data.meta.videoId}`;
+                            }
+                        }
                     } else if (Array.isArray(data)) {
                         window.GameAudio.notesData = data;
-                        window.GameAudio.metaData = { title: "インポート楽曲", author: "不明", difficultyType: "MASTER", difficultyLevel: "30", comment: "" };
+                        window.GameAudio.metaData = { title: "インポート楽曲", author: "不明", difficultyType: "MASTER", difficultyLevel: "30", comment: "", videoId: "eWBjxT54RQA" };
                     }
 
                     this.sortAndRefreshTimeline();
                     this.resetLive();
 
-                    // インポート完了後、確認用ダイアログを表示（読み取り専用モード）
+                    // 確認用ダイアログを表示
                     this.openMetaDialog(true); 
 
                 } catch (err) {
-                    alert('JSONファイルの読み込みに失敗しました。フォーマットを確認してください。');
+                    alert('JSONファイルの読み込みに失敗しました。');
                     console.error(err);
                 }
             };
