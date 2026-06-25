@@ -56,7 +56,6 @@ if (typeof window.GameCore === 'undefined') {
 
                 if (this.isBgVisible && this.keyMap.hasOwnProperty(key)) {
                     const lane = this.keyMap[key];
-                    // ★ 押しっぱなし(連打バグ)をここで完全にブロック
                     if (!this.isKeyHolding[lane]) {
                         this.isKeyHolding[lane] = true;
                         this.handlePressStart(lane);
@@ -85,10 +84,8 @@ if (typeof window.GameCore === 'undefined') {
                 laneEl.addEventListener(startEvent, (e) => {
                     if (!this.isBgVisible) return;
                     e.preventDefault();
-                    if (!this.isKeyHolding[i]) {
-                        this.isKeyHolding[i] = true;
-                        this.handlePressStart(i);
-                    }
+                    this.isKeyHolding[i] = true;
+                    this.handlePressStart(i);
                 });
                 laneEl.addEventListener(endEvent, (e) => {
                     if (!this.isBgVisible) return;
@@ -147,6 +144,7 @@ if (typeof window.GameCore === 'undefined') {
             this.pressTimestamps[lane] = currentTime;
 
             const laneEl = document.getElementById(`lane-${lane}`);
+            // ピアノタイル風のバグを防ぐため、シンプルに「active-tap」のみを付与してレーン自体を光らせる
             if (laneEl) {
                 laneEl.classList.add('active-tap');
             }
@@ -161,7 +159,7 @@ if (typeof window.GameCore === 'undefined') {
                         judged: false
                     };
                     const endNote = {
-                        time: currentTime, // 離した瞬間に更新される仮の時間
+                        time: currentTime, // 離した瞬間に正しい時間へ更新します
                         lane: lane,
                         type: 'slide',
                         judged: false
@@ -173,10 +171,8 @@ if (typeof window.GameCore === 'undefined') {
                     // 離した瞬間に時間を上書きできるよう参照を保存
                     this.recordingNotes[lane] = { start: startNote, end: endNote };
 
-                    // ★違反ノード対策：押した瞬間は配列のソートだけ行い、重いHTML全書き換え(updateTimeline)はスキップ
-                    if (window.GameAudio && window.GameAudio.notesData) {
-                        window.GameAudio.notesData.sort((a, b) => a.time - b.time);
-                    }
+                    // タイムラインを更新
+                    this.sortAndRefreshTimeline();
                 }
             } 
             // プレイモード
@@ -197,22 +193,24 @@ if (typeof window.GameCore === 'undefined') {
             const currentTime = window.GameAudio ? window.GameAudio.getCurrentTimeMs() : Date.now();
 
             if (this.currentMode === 'record') {
+                // 【録音モード】
                 const session = this.recordingNotes[lane];
 
                 if (session) {
                     const duration = currentTime - session.start.time;
 
                     if (duration < 500) {
-                        // 0.5秒未満なら単発タップ：仮で作った終点(slide)を完全に削除
+                        // 0.5秒未満ならタップ単発：仮で作った終点(slide)を完全に削除
                         window.GameAudio.notesData = window.GameAudio.notesData.filter(note => note !== session.end);
+                        console.log("単発タップとして記録しました");
                     } else {
-                        // 0.5秒以上ならスライド確定：終点ノーツの時間を確定
+                        // 0.5秒以上ならスライド確定：終点ノーツの時間を「今離した時間」に更新
                         session.end.time = currentTime;
+                        console.log("スライド（ロングノーツ）として確定しました");
                     }
 
-                    // 録音終了（指を離した）のタイミングで初めてエディター（タイムライン）の表示を更新
                     this.sortAndRefreshTimeline();
-                    this.recordingNotes[lane] = null; 
+                    this.recordingNotes[lane] = null; // セッション終了
                 }
             } else if (this.currentMode === 'play') {
                 this.judgeOnRelease(lane, currentTime);
@@ -226,14 +224,13 @@ if (typeof window.GameCore === 'undefined') {
             if (window.GameAudio && window.GameAudio.notesData) {
                 window.GameAudio.notesData.sort((a, b) => a.time - b.time);
             }
-            // エディターパネルが開いている（editモード）時、または必要な時だけ画面を書き換える
             if (window.GameVisuals && typeof window.GameVisuals.updateTimeline === 'function') {
                 window.GameVisuals.updateTimeline();
             }
         },
 
         recordEvaluatedNote(lane, targetTime, type) {
-            // 未使用
+            // 新しいPressStart/End方式に移行したため未使用ですが、エラー防止のため残しています
         },
 
         switchMode(mode) {
@@ -352,6 +349,7 @@ if (typeof window.GameCore === 'undefined') {
             }
         },
 
+        // ペア判定ロジック（録音モードの「時間更新前」でもペアとして認識できるように修正）
         getLongNotePairs() {
             if (!window.GameAudio || !window.GameAudio.notesData) return [];
             const pairs = [];
@@ -359,8 +357,10 @@ if (typeof window.GameCore === 'undefined') {
 
             for (let i = 0; i < notes.length; i++) {
                 if (notes[i].type === 'tap') {
+                    // 同じレーンで、始点以降にある一番近い slide ノーツを探索
                     const endNote = notes.find((n, idx) => idx > i && n.lane === notes[i].lane && n.type === 'slide');
                     if (endNote) {
+                        // ★修正：録音中（同じ時間＝差分0）または、すでに確定したロング（差分450ms以上）をペアとして認める
                         const timeDiff = endNote.time - notes[i].time;
                         if (timeDiff === 0 || timeDiff >= 450) {
                             pairs.push({ start: notes[i], end: endNote });
